@@ -11,8 +11,8 @@ RUN dpkg --add-architecture i386 \
         flex gcc-multilib git git-core g++-multilib gnupg gperf imagemagick kmod lib32ncurses5-dev \
         lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev \
         libwxgtk3.0-dev libxml2 libxml2-utils lsof lzop make maven openjdk-8-jdk pngcrush procps python \
-        rsync schedtool software-properties-common squashfs-tools vim wget xdelta3 xsltproc yasm zip \
-        zlib1g-dev zlib1g-dev:i386
+        rsync schedtool software-properties-common squashfs-tools sudo vim wget xdelta3 xsltproc yasm \
+        zip zlib1g-dev zlib1g-dev:i386
 
 # Download and build tools
 ##########################
@@ -28,7 +28,7 @@ RUN mkdir -p /src/bin \
  && rm -rf OpenDelta/
 
 # Create Volumes
-############################
+################
 ENV MIRROR_DIR=/srv/mirror \
     SRC_DIR=/srv/src \
     TMP_DIR=/srv/tmp \
@@ -41,15 +41,15 @@ ENV MIRROR_DIR=/srv/mirror \
     USERSCRIPTS_DIR=/srv/userscripts
 
 VOLUME [ \
-  ${MIRROR_DIR}, \
-  ${SRC_DIR}, \
-  ${TMP_DIR}, \
-  ${CCACHE_DIR}, \
-  ${ZIP_DIR}, \
-  ${LMANIFEST_DIR}, \
-  ${DELTA_DIR}, \
-  ${KEYS_DIR}, \
-  ${LOGS_DIR}, \
+  ${MIRROR_DIR} \
+  ${SRC_DIR} \
+  ${TMP_DIR} \
+  ${CCACHE_DIR} \
+  ${ZIP_DIR} \
+  ${LMANIFEST_DIR} \
+  ${DELTA_DIR} \
+  ${KEYS_DIR} \
+  ${LOGS_DIR} \
   ${USERSCRIPTS_DIR} \
 ]
 
@@ -65,9 +65,9 @@ ENV ANDROID_JACK_VM_ARGS="-Xmx10g -Dfile.encoding=UTF-8 -XX:+TieredCompilation" 
 RUN groupadd -g ${BUILD_USER_GID} ${BUILD_USER} \
  && useradd -m -u ${BUILD_USER_ID} -g ${BUILD_USER_GID} ${BUILD_USER} \
  && mkdir -p ${BUILD_SCRIPTS_PATH} \
- && chown -R ${BUILD_USER}:${BUILD_USER} /src
-#  && echo ${BUILD_USER} >/src/builduser \
-#  && echo "export USER="${BUILD_USER} >>/home/${BUILD_USER}/.bashrc \
+ && chown -R ${BUILD_USER}:${BUILD_USER} /src \
+ && echo "android-build ALL = (root) NOPASSWD: /bin/mount" >> /etc/sudoers \
+ && echo "android-build ALL = (root) NOPASSWD: /bin/umount" >> /etc/sudoers
 
 COPY src/ ${BUILD_SCRIPTS_PATH}
 COPY entrypoint.sh /
