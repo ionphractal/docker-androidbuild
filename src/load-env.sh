@@ -11,4 +11,4 @@ while read line; do
   key=$(awk -F'=' '{print $1}' <<<"$line")
   value=${line#*=}
   export $key="${!key:-$value}"
-done < <(cat ../.env)
+done < <(cat .env)
