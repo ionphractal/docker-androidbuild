@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Load environment variables which have not been set already
-pushd $(dirname $0)
+pushd "${BUILD_SCRIPTS_PATH}"
 SCRIPT_DIR=$(pwd)
 bash "${BUILD_SCRIPTS_PATH}/load-env.sh"
 popd
