@@ -70,15 +70,15 @@ function mirror_sync() {
   [ "$LOCAL_MIRROR" != "true" ] && return
 
   out "Syncing mirror repository" | tee -a "$repo_log"
-  pushd "$MIRROR_DIR"
+  pushd "$MIRROR_DIR" &>> "$DEBUG_LOG"
   repo sync --force-sync --no-clone-bundle &>> "$repo_log"
-  popd
+  popd &>> "$DEBUG_LOG"
 }
 
 function mirror_init() {
   [ "$LOCAL_MIRROR" != "true" ] && return
 
-  pushd "$MIRROR_DIR"
+  pushd "$MIRROR_DIR" &>> "$DEBUG_LOG"
 
   if [ ! -d .repo ]; then
     out "Initializing mirror repository" | tee -a "$repo_log"
@@ -100,7 +100,7 @@ function mirror_init() {
   fi
 
   mirror_sync
-  popd
+  popd &>> "$DEBUG_LOG"
 }
 
 function start_branch_build() {
@@ -113,10 +113,10 @@ function start_branch_build() {
 function repo_reset() {
   for path in "vendor/cm" "vendor/lineage" "frameworks/base"; do
     if [ -d "$path" ]; then
-      pushd "$path"
+      pushd "$path" &>> "$DEBUG_LOG"
       git reset -q --hard
       git clean -q -fd
-      popd
+      popd &>> "$DEBUG_LOG"
     fi
   done
 }
@@ -166,9 +166,9 @@ function copy_muppets_manifests() {
 
 function repo_sync() {
   out "Syncing branch repository" | tee -a "$repo_log"
-  pushd "$SRC_DIR/$branch_dir"
+  pushd "$SRC_DIR/$branch_dir" &>> "$DEBUG_LOG"
   repo sync -c --force-sync &>> "$repo_log"
-  popd
+  popd &>> "$DEBUG_LOG"
 }
 
 function get_android_version() {
@@ -225,7 +225,7 @@ function patch_signature_spoofing() {
   esac
 
   if ! [ -z $patch_name ]; then
-    pushd frameworks/base
+    pushd frameworks/base &>> "$DEBUG_LOG"
     if [ "$SIGNATURE_SPOOFING" == "yes" ]; then
       out "Applying the standard signature spoofing patch ($patch_name) to frameworks/base"
       out "WARNING: the standard signature spoofing patch introduces a security threat"
@@ -235,7 +235,7 @@ function patch_signature_spoofing() {
       sed 's/android:protectionLevel="dangerous"/android:protectionLevel="signature|privileged"/' "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name" | patch --quiet -p1
     fi
     git clean -q -f
-    popd
+    popd &>> "$DEBUG_LOG"
 
     # Override device-specific settings for the location providers
     mkdir -p "vendor/$vendor/overlay/microg/frameworks/base/core/res/res/values/"
@@ -255,11 +255,11 @@ function patch_unifiednlp() {
   esac
 
   if ! [ -z $patch_name ]; then
-    pushd frameworks/base
+    pushd frameworks/base &>> "$DEBUG_LOG"
       out "Applying location services patch"
       patch --quiet -p1 -i "${BUILD_SCRIPTS_PATH}/location_services_patches/$patch_name"
     git clean -q -f
-    popd
+    popd &>> "$DEBUG_LOG"
   else
     die "ERROR: can't find a unifiednlp support patch for the current Android version ($android_version)"
   fi
@@ -385,7 +385,7 @@ function build_delta() {
   if [ -d "delta_last/$codename/" ]; then
     # If not the first build, create delta files
     out "Generating delta files for $codename" | tee -a "$DEBUG_LOG"
-    pushd /src/delta
+    pushd /src/delta &>> "$DEBUG_LOG"
     export HOME_OVERRIDE=/src \
     export BIN_XDELTA=xdelta3 \
     export FILE_MATCH=lineage-*.zip
@@ -401,7 +401,7 @@ function build_delta() {
     if [ "$DELETE_OLD_DELTAS" -gt "0" ]; then
       /usr/bin/python ${BUILD_SCRIPTS_PATH}/clean_up.py -n $DELETE_OLD_DELTAS -V $los_ver -N 1 "$DELTA_DIR/$codename" &>> $DEBUG_LOG
     fi
-    popd
+    popd &>> "$DEBUG_LOG"
   else
     # If the first build, copy the current full zip in $source_dir/delta_last/$codename/
     out "No previous build for $codename; using current build as base for the next delta" | tee -a "$DEBUG_LOG"
@@ -411,11 +411,11 @@ function build_delta() {
 }
 
 function make_checksum() {
-  pushd out/target/product/$codename
+  pushd out/target/product/$codename &>> "$DEBUG_LOG"
   for build in lineage-*.zip; do
     sha256sum "$build" > "$ZIP_DIR/$zipsubdir/$build.sha256sum"
   done
-  popd
+  popd &>> "$DEBUG_LOG"
 }
 
 # Move produced ZIP files to the main OUT directory
@@ -452,7 +452,7 @@ function unmount_overlay() {
   [ "$BUILD_OVERLAY" != "true" ] && return
 
   # The Jack server must be stopped manually, as we want to unmount $TMP_DIR/merged
-  pushd "$TMP_DIR"
+  pushd "$TMP_DIR" &>> "$DEBUG_LOG"
   if [ -f "$TMP_DIR/merged/prebuilts/sdk/tools/jack-admin" ]; then
     "$TMP_DIR/merged/prebuilts/sdk/tools/jack-admin kill-server" &> /dev/null || true
   fi
@@ -463,7 +463,7 @@ function unmount_overlay() {
   done
 
   sudo umount "$TMP_DIR/merged"
-  popd
+  popd &>> "$DEBUG_LOG"
 }
 
 function cleanup_outdir() {
@@ -471,13 +471,13 @@ function cleanup_outdir() {
 
   out "Cleaning source dir for device $codename" | tee -a "$DEBUG_LOG"
   if [ "$BUILD_OVERLAY" == "true" ]; then
-    pushd "$TMP_DIR"
+    pushd "$TMP_DIR" &>> "$DEBUG_LOG"
     rm -rf device workdir merged
   else
-    pushd "$source_dir"
+    pushd "$source_dir" &>> "$DEBUG_LOG"
     mka clean &>> "$DEBUG_LOG"
   fi
-  popd
+  popd &>> "$DEBUG_LOG"
 }
 
 # Create the OpenDelta's builds JSON file
