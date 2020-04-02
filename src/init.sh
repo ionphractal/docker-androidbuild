@@ -20,8 +20,8 @@
 # Copy the user scripts
 mkdir -p ${BUILD_SCRIPTS_PATH}/userscripts
 cp -r $USERSCRIPTS_DIR/. ${BUILD_SCRIPTS_PATH}/userscripts
-find ${BUILD_SCRIPTS_PATH}/userscripts ! -type d ! -user root -exec echo ">> [$(date)] {} is not owned by root, removing" \; -exec rm {} \;
-find ${BUILD_SCRIPTS_PATH}/userscripts ! -type d -perm /g=w,o=w -exec echo ">> [$(date)] {} is writable by non-root users, removing" \; -exec rm {} \;
+find ${BUILD_SCRIPTS_PATH}/userscripts ! -type d ! -user ${BUILD_USER} -exec echo ">> [$(date)] {} is not owned by ${BUILD_USER}, removing" \; -exec rm {} \;
+find ${BUILD_SCRIPTS_PATH}/userscripts ! -type d -perm /g=w,o=w -exec echo ">> [$(date)] {} is writable by world users, removing" \; -exec rm {} \;
 
 # Initialize CCache if it will be used
 if [ "$USE_CCACHE" = 1 ]; then
@@ -57,7 +57,7 @@ if [ "$SIGN_BUILDS" = true ]; then
   done
 fi
 
-if [ "$CRONTAB_TIME" = "now" ]; then
+if [ "$CRONTAB_TIME" == "now" -o -z "$CRONTAB_TIME" ]; then
   ${BUILD_SCRIPTS_PATH}/build.sh
 else
   # Initialize the cronjob
