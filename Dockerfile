@@ -62,15 +62,15 @@ ENV ANDROID_JACK_VM_ARGS="-Xmx10g -Dfile.encoding=UTF-8 -XX:+TieredCompilation" 
     BUILD_SCRIPTS_PATH=/src/scripts \
     PATH="/src/bin:$PATH"
 
+COPY entrypoint.sh /
+COPY src/ ${BUILD_SCRIPTS_PATH}
+
 RUN groupadd -g ${BUILD_USER_GID} ${BUILD_USER} \
  && useradd -m -u ${BUILD_USER_ID} -g ${BUILD_USER_GID} ${BUILD_USER} \
  && mkdir -p ${BUILD_SCRIPTS_PATH} \
  && chown -R ${BUILD_USER}:${BUILD_USER} /src \
  && echo "android-build ALL = (root) NOPASSWD: /bin/mount" >> /etc/sudoers \
  && echo "android-build ALL = (root) NOPASSWD: /bin/umount" >> /etc/sudoers
-
-COPY src/ ${BUILD_SCRIPTS_PATH}
-COPY entrypoint.sh /
 
 # Allow redirection of stdout to docker logs
 ############################################
