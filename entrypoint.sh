@@ -3,7 +3,7 @@
 # Load environment variables which have not been set already
 pushd "${BUILD_SCRIPTS_PATH}" &> /dev/null
 SCRIPT_DIR=$(pwd)
-bash "${BUILD_SCRIPTS_PATH}/load-env.sh"
+source "${BUILD_SCRIPTS_PATH}/load-env.sh"
 popd &> /dev/null
 
 # Create all missing directories from env variables
