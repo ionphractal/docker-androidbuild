@@ -18,11 +18,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 function out() {
-  echo ">> [$(date)] "${1+"$@"}
+  echo ">> [$(date)] $@"
 }
 
 function die() {
-  out "${1+"$@"}"
+  out "$@"
   exit 1
 }
 
@@ -32,7 +32,7 @@ function exec_user_script() {
   shift
   if [ -f "$script" ]; then
     out "Executing '$script'"
-    $script ${1+"@"}
+    $script $@
   fi
 }
 
@@ -60,23 +60,23 @@ function wipe_outdir() {
 function repo_migrate() {
   [ ! -d "$SRC_DIR/.repo" ] && return
 
-  local branch_dir=$(repo info -o | sed -ne 's/Manifest branch: refs\/heads\///p' | sed 's/[^[:alnum:]]/_/g')
-  branch_dir=${branch_dir^^}
-  out "WARNING: old source dir detected, moving source from \"\$SRC_DIR\" to \"\$SRC_DIR/$branch_dir\""
-  if [ -d "$branch_dir" ] && [ -z "$(ls -A "$branch_dir")" ]; then
-    out "ERROR: $branch_dir already exists and is not empty; aborting"
+  local BRANCH_DIR=$(repo info -o | sed -ne 's/Manifest branch: refs\/heads\///p' | sed 's/[^[:alnum:]]/_/g')
+  BRANCH_DIR=${BRANCH_DIR^^}
+  out "WARNING: old source dir detected, moving source from \"\$SRC_DIR\" to \"\$SRC_DIR/$BRANCH_DIR\""
+  if [ -d "$BRANCH_DIR" ] && [ -z "$(ls -A "$BRANCH_DIR")" ]; then
+    out "ERROR: $BRANCH_DIR already exists and is not empty; aborting"
   fi
-  mkdir -p "$branch_dir"
-  find . -maxdepth 1 ! -name "$branch_dir" ! -path . -exec mv {} "$branch_dir" \;
+  mkdir -p "$BRANCH_DIR"
+  find . -maxdepth 1 ! -name "$BRANCH_DIR" ! -path . -exec mv {} "$BRANCH_DIR" \;
 }
 
 # Sync local source mirror
 function mirror_sync() {
   [ "$LOCAL_MIRROR" != "true" ] && return
 
-  out "Syncing mirror repository" | tee -a "$repo_log"
+  out "Syncing mirror repository" | tee -a "$REPO_LOG"
   pushd "$MIRROR_DIR" &>> "$DEBUG_LOG"
-  repo sync --force-sync --no-clone-bundle &>> "$repo_log"
+  repo sync --force-sync --no-clone-bundle &>> "$REPO_LOG"
   popd &>> "$DEBUG_LOG"
 }
 
@@ -100,8 +100,8 @@ function mirror_init() {
   pushd "$MIRROR_DIR" &>> "$DEBUG_LOG"
 
   if [ ! -d .repo ]; then
-    out "Initializing mirror repository" | tee -a "$repo_log"
-    yes | repo init -u ${MIRROR:-https://github.com/${ORG_NAME}/mirror} --mirror --no-clone-bundle -p linux &>> "$repo_log"
+    out "Initializing mirror repository" | tee -a "$REPO_LOG"
+    yes | repo init -u ${MIRROR:-https://github.com/${ORG_NAME}/mirror} --mirror --no-clone-bundle -p linux &>> "$REPO_LOG"
   fi
 
   # Copy local manifests to the appropriate folder in order take them into consideration
@@ -118,7 +118,9 @@ function mirror_init() {
 
 # Make source directory for the current branch and devices to build
 function start_branch_build() {
-  mkdir -p "$SRC_DIR/$branch_dir"
+  local branch=$1; shift
+  local devices="$@"
+  mkdir -p "$SRC_DIR/$BRANCH_DIR"
   out "Branch :  $branch"
   out "Devices:  $devices"
 }
@@ -137,11 +139,12 @@ function repo_reset() {
 
 # Initialize repo sources
 function repo_init() {
-  out "(Re)initializing branch repository" | tee -a "$repo_log"
+  local branch=$1
+  out "(Re)initializing branch repository" | tee -a "$REPO_LOG"
   if [ "$LOCAL_MIRROR" == "true" ]; then
-    yes | repo init -u ${REPO:-https://github.com/${ORG_NAME}/android.git} --reference "$MIRROR_DIR" -b "$branch" &>> "$repo_log"
+    yes | repo init -u ${REPO:-https://github.com/${ORG_NAME}/android.git} --reference "$MIRROR_DIR" -b "$branch" &>> "$REPO_LOG"
   else
-    yes | repo init -u ${REPO:-https://github.com/${ORG_NAME}/android.git} -b "$branch" &>> "$repo_log"
+    yes | repo init -u ${REPO:-https://github.com/${ORG_NAME}/android.git} -b "$branch" &>> "$REPO_LOG"
   fi
 }
 
@@ -158,6 +161,7 @@ function copy_muppets_manifests() {
   rm -f .repo/local_manifests/proprietary.xml
   [ "$INCLUDE_PROPRIETARY" != "true" ] && return
 
+  local branch=$1
   if [[ $branch =~ .*cm\-13\.0.* ]]; then
     themuppets_branch=cm-13.0
   elif [[ $branch =~ .*cm-14\.1.* ]]; then
@@ -180,47 +184,48 @@ function copy_muppets_manifests() {
 
 # Sync current branch repo
 function repo_sync() {
-  out "Syncing branch repository" | tee -a "$repo_log"
-  pushd "$SRC_DIR/$branch_dir" &>> "$DEBUG_LOG"
-  repo sync -c --force-sync &>> "$repo_log"
+  out "Syncing branch repository" | tee -a "$REPO_LOG"
+  pushd "$SRC_DIR/$BRANCH_DIR" &>> "$DEBUG_LOG"
+  repo sync -c --force-sync &>> "$REPO_LOG"
   popd &>> "$DEBUG_LOG"
 }
 
 # Get current android version from source
 function get_android_version() {
-  platform_code=$(sed -n -e 's/^\s*DEFAULT_PLATFORM_VERSION := //p' build/core/version_defaults.mk)
-  android_version=$(sed -n -e 's/^\s*PLATFORM_VERSION\.'$platform_code' := //p' build/core/version_defaults.mk)
-  if [ -z $android_version ]; then
+  local branch=$1
+  local platform_code=$(sed -n -e 's/^\s*DEFAULT_PLATFORM_VERSION := //p' build/core/version_defaults.mk)
+  ANDROID_VERSION=$(sed -n -e 's/^\s*PLATFORM_VERSION\.'$platform_code' := //p' build/core/version_defaults.mk)
+  if [ -z $ANDROID_VERSION ]; then
     die "Can't detect the android version"
   fi
-  android_version_major=$(cut -d '.' -f 1 <<< $android_version)
+  $ANDROID_VERSION_MAJOR=$(cut -d '.' -f 1 <<< $ANDROID_VERSION)
 
-  if [ "$android_version_major" -lt "7" ]; then
+  if [ "$$ANDROID_VERSION_MAJOR" -lt "7" ]; then
     die "ERROR: $branch requires a JDK version too old (< 8); aborting"
   fi
 }
 
 # Get current vendor version
 function get_vendor_version() {
-  if [ "$android_version_major" -ge "8" ]; then
-    vendor="${VENDOR_NAME}"
+  if [ "$$ANDROID_VERSION_MAJOR" -ge "8" ]; then
+    VENDOR="${VENDOR_NAME}"
   else
-    vendor="cm"
+    VENDOR="cm"
   fi
 
-  if [ ! -d "vendor/$vendor" ]; then
-    die "ERROR: Missing \"vendor/$vendor\", aborting"
+  if [ ! -d "vendor/$VENDOR" ]; then
+    die "ERROR: Missing \"vendor/$VENDOR\", aborting"
   fi
 
-  distro_ver_major=$(sed -n -e 's/^\s*PRODUCT_VERSION_MAJOR = //p' "vendor/$vendor/config/common.mk")
-  distro_ver_minor=$(sed -n -e 's/^\s*PRODUCT_VERSION_MINOR = //p' "vendor/$vendor/config/common.mk")
-  distro_ver="$distro_ver_major.$distro_ver_minor"
+  DISTRO_VER_MAJOR=$(sed -n -e 's/^\s*PRODUCT_VERSION_MAJOR = //p' "vendor/$VENDOR/config/common.mk")
+  DISTRO_VER_MINOR=$(sed -n -e 's/^\s*PRODUCT_VERSION_MINOR = //p' "vendor/$VENDOR/config/common.mk")
+  DISTRO_VER="$DISTRO_VER_MAJOR.$DISTRO_VER_MINOR"
 }
 
 # Set up our overlay
 function setup_vendor_overlay() {
-  mkdir -p "vendor/$vendor/overlay/microg/"
-  sed -i "1s;^;PRODUCT_PACKAGE_OVERLAYS := vendor/$vendor/overlay/microg\n;" "vendor/$vendor/config/common.mk"
+  mkdir -p "vendor/$VENDOR/overlay/microg/"
+  sed -i "1s;^;PRODUCT_PACKAGE_OVERLAYS := vendor/$VENDOR/overlay/microg\n;" "vendor/$VENDOR/config/common.mk"
 }
 
 # If needed, apply the microG's signature spoofing patch
@@ -231,7 +236,7 @@ function patch_signature_spoofing() {
 
   # Determine which patch should be applied to the current Android source tree
   local patch_name=""
-  case $android_version in
+  case $ANDROID_VERSION in
     4.4*  )    patch_name="android_frameworks_base-KK-LP.patch" ;;
     5.*   )    patch_name="android_frameworks_base-KK-LP.patch" ;;
     6.*   )    patch_name="android_frameworks_base-M.patch" ;;
@@ -255,10 +260,10 @@ function patch_signature_spoofing() {
     popd
 
     # Override device-specific settings for the location providers
-    mkdir -p "vendor/$vendor/overlay/microg/frameworks/base/core/res/res/values/"
-    cp "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/frameworks_base_config.xml" "vendor/$vendor/overlay/microg/frameworks/base/core/res/res/values/config.xml"
+    mkdir -p "vendor/$VENDOR/overlay/microg/frameworks/base/core/res/res/values/"
+    cp "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/frameworks_base_config.xml" "vendor/$VENDOR/overlay/microg/frameworks/base/core/res/res/values/config.xml"
   else
-    die "ERROR: can't find a suitable signature spoofing patch for the current Android version ($android_version)"
+    die "ERROR: can't find a suitable signature spoofing patch for the current Android version ($ANDROID_VERSION)"
   fi
 }
 
@@ -267,7 +272,7 @@ function patch_unifiednlp() {
 
   # Determine which patch should be applied to the current Android source tree
   local patch_name=""
-  case $android_version in
+  case $ANDROID_VERSION in
     10*  )    patch_name="android_frameworks_base-Q.patch" ;;
   esac
 
@@ -278,13 +283,13 @@ function patch_unifiednlp() {
     git clean -q -f
     popd
   else
-    die "ERROR: can't find a unifiednlp support patch for the current Android version ($android_version)"
+    die "ERROR: can't find a unifiednlp support patch for the current Android version ($ANDROID_VERSION)"
   fi
 }
 
 function set_release_type() {
   out "Setting \"$RELEASE_TYPE\" as release type"
-  sed -i "/\$(filter .*\$(${vendor^^}_BUILDTYPE)/,+2d" "vendor/$vendor/config/common.mk"
+  sed -i "/\$(filter .*\$(${VENDOR^^}_BUILDTYPE)/,+2d" "vendor/$VENDOR/config/common.mk"
 }
 
 # Set a custom updater URI if a OTA URL is provided
@@ -292,7 +297,7 @@ function set_ota_url() {
   [ -z "$OTA_URL" ] && return
 
   out "Adding OTA URL overlay (for custom URL $OTA_URL)"
-  updater_url_overlay_dir="vendor/$vendor/overlay/microg/packages/apps/Updater/res/values/"
+  local updater_url_overlay_dir="vendor/$VENDOR/overlay/microg/packages/apps/Updater/res/values/"
   mkdir -p "$updater_url_overlay_dir"
 
   if [ -n "$(grep updater_server_url packages/apps/Updater/res/values/strings.xml)" ]; then
@@ -311,7 +316,7 @@ function add_custom_packages() {
   [ -z "$CUSTOM_PACKAGES" ] && return
 
   out "Adding custom packages ($CUSTOM_PACKAGES)"
-  sed -i "1s;^;PRODUCT_PACKAGES += $CUSTOM_PACKAGES\n\n;" "vendor/$vendor/config/common.mk"
+  sed -i "1s;^;PRODUCT_PACKAGES += $CUSTOM_PACKAGES\n\n;" "vendor/$VENDOR/config/common.mk"
 }
 
 function setup_keys() {
@@ -321,12 +326,12 @@ function setup_keys() {
   # Soong (Android 9+) complains if the signing keys are outside the build path
   ln -sf "$KEYS_DIR" user-keys
 
-  if [ "$android_version_major" -lt "10" ]; then
-    sed -i "1s;^;PRODUCT_DEFAULT_DEV_CERTIFICATE := user-keys/releasekey\nPRODUCT_OTA_PUBLIC_KEYS := user-keys/releasekey\nPRODUCT_EXTRA_RECOVERY_KEYS := user-keys/releasekey\n\n;" "vendor/$vendor/config/common.mk"
+  if [ "$$ANDROID_VERSION_MAJOR" -lt "10" ]; then
+    sed -i "1s;^;PRODUCT_DEFAULT_DEV_CERTIFICATE := user-keys/releasekey\nPRODUCT_OTA_PUBLIC_KEYS := user-keys/releasekey\nPRODUCT_EXTRA_RECOVERY_KEYS := user-keys/releasekey\n\n;" "vendor/$VENDOR/config/common.mk"
   fi
 
-  if [ "$android_version_major" -ge "10" ]; then
-    sed -i "1s;^;PRODUCT_DEFAULT_DEV_CERTIFICATE := user-keys/releasekey\nPRODUCT_OTA_PUBLIC_KEYS := user-keys/releasekey\n\n;" "vendor/$vendor/config/common.mk"
+  if [ "$$ANDROID_VERSION_MAJOR" -ge "10" ]; then
+    sed -i "1s;^;PRODUCT_DEFAULT_DEV_CERTIFICATE := user-keys/releasekey\nPRODUCT_OTA_PUBLIC_KEYS := user-keys/releasekey\n\n;" "vendor/$VENDOR/config/common.mk"
   fi
 }
 
@@ -337,10 +342,10 @@ function prepare_build_env() {
 }
 
 function mirror_update() {
-  currentdate=$(date +%Y%m%d)
-  if [ "$builddate" != "$currentdate" ]; then
+  CURRENT_DATE=$(date +%Y%m%d)
+  if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
     # Sync the source code
-    builddate=$currentdate
+    BUILD_DATE=$CURRENT_DATE
     mirror_sync
     repo_sync
   fi
@@ -349,38 +354,40 @@ function mirror_update() {
 function mount_overlay() {
   if [ "$BUILD_OVERLAY" == "true" ]; then
     mkdir -p "$TMP_DIR/device" "$TMP_DIR/workdir" "$TMP_DIR/merged"
-    sudo mount -t overlay overlay -o lowerdir="$SRC_DIR/$branch_dir",upperdir="$TMP_DIR/device",workdir="$TMP_DIR/workdir" "$TMP_DIR/merged"
+    sudo mount -t overlay overlay -o lowerdir="$SRC_DIR/$BRANCH_DIR",upperdir="$TMP_DIR/device",workdir="$TMP_DIR/workdir" "$TMP_DIR/merged"
     source_dir="$TMP_DIR/merged"
   else
-    source_dir="$SRC_DIR/$branch_dir"
+    source_dir="$SRC_DIR/$BRANCH_DIR"
   fi
 }
 
 function make_dirs() {
+  local device=$1
   if [ "$ZIP_SUBDIR" == "true" ]; then
-    zipsubdir=$codename
-    mkdir -p "$ZIP_DIR/$zipsubdir"
+    ZIP_SUB_DIR=$device
+    mkdir -p "$ZIP_DIR/$ZIP_SUB_DIR"
   else
-    zipsubdir=
+    ZIP_SUB_DIR=
   fi
   if [ "$LOGS_SUBDIR" == "true" ]; then
-    logsubdir=$codename
-    mkdir -p "$LOGS_DIR/$logsubdir"
+    LOG_SUB_DIR=$device
+    mkdir -p "$LOGS_DIR/$LOG_SUB_DIR"
   else
-    logsubdir=
+    LOG_SUB_DIR=
   fi
 }
 
 function build_device() {
-  local device=$1
+  local branch=$1
+  local device=$2
   out "Starting build for $device, $branch branch" | tee -a "$DEBUG_LOG"
   build_successful=false
   if brunch $device &>> "$DEBUG_LOG"; then
-    currentdate=$(date +%Y%m%d)
+    CURRENT_DATE=$(date +%Y%m%d)
     fix_build_date $device
     build_delta $device
-    make_checksum
-    copy_zips
+    make_checksum $device
+    copy_zips $device
     copy_boot
     build_successful=true
   else
@@ -390,15 +397,15 @@ function build_device() {
 
 function fix_build_date() {
   local device=$1
-  if [ "$builddate" != "$currentdate" ]; then
-    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$currentdate-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $currentdate $builddate \; &>> "$DEBUG_LOG"
+  if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
+    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$CURRENT_DATE-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $CURRENT_DATE $BUILD_DATE \; &>> "$DEBUG_LOG"
   fi
 }
 
 function build_delta() {
   [ "$BUILD_DELTA" != "true" ] && return
-  local device=$1
 
+  local device=$1
   if [ -d "delta_last/$device/" ]; then
     # If not the first build, create delta files
     out "Generating delta files for $device" | tee -a "$DEBUG_LOG"
@@ -406,8 +413,8 @@ function build_delta() {
     export HOME_OVERRIDE=/src \
     export BIN_XDELTA=xdelta3 \
     export FILE_MATCH="${VENDOR_NAME}-*.zip"
-    export PATH_CURRENT="$SRC_DIR/$branch_dir/out/target/product/$device"
-    export PATH_LAST="$SRC_DIR/$branch_dir/delta_last/$device"
+    export PATH_CURRENT="$SRC_DIR/$BRANCH_DIR/out/target/product/$device"
+    export PATH_LAST="$SRC_DIR/$BRANCH_DIR/delta_last/$device"
     export KEY_X509="$KEYS_DIR/releasekey.x509.pem"
     export KEY_PK8="$KEYS_DIR/releasekey.pk8"
     if ./opendelta.sh $device &>> "$DEBUG_LOG"; then
@@ -416,7 +423,7 @@ function build_delta() {
       out "Delta generation for $device failed" | tee -a "$DEBUG_LOG"
     fi
     if [ "$DELETE_OLD_DELTAS" -gt "0" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_DELTAS -V $distro_ver -N 1 "$DELTA_DIR/$device" &>> $DEBUG_LOG
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_DELTAS -V $DISTRO_VER -N 1 "$DELTA_DIR/$device" &>> $DEBUG_LOG
     fi
     popd &>> "$DEBUG_LOG"
   else
@@ -428,39 +435,42 @@ function build_delta() {
 }
 
 function make_checksum() {
-  pushd out/target/product/$codename &>> "$DEBUG_LOG"
+  local device=$1
+  pushd out/target/product/$device &>> "$DEBUG_LOG"
   for build in ${VENDOR_NAME}-*.zip; do
-    sha256sum "$build" > "$ZIP_DIR/$zipsubdir/$build.sha256sum"
+    sha256sum "$build" > "$ZIP_DIR/$ZIP_SUB_DIR/$build.sha256sum"
   done
   popd &>> "$DEBUG_LOG"
 }
 
 # Move produced ZIP files to the main OUT directory
 function copy_zips() {
-  out "Moving build artifacts for $codename to '$ZIP_DIR/$zipsubdir'" | tee -a "$DEBUG_LOG"
-  find . -maxdepth 1 -name "${VENDOR_NAME}-*.zip*" -type f -exec mv {} "$ZIP_DIR/$zipsubdir/" \; &>> "$DEBUG_LOG"
+  local device=$1
+  out "Moving build artifacts for $device to '$ZIP_DIR/$ZIP_SUB_DIR'" | tee -a "$DEBUG_LOG"
+  find . -maxdepth 1 -name "${VENDOR_NAME}-*.zip*" -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
 }
 
 function copy_boot() {
   if [ "$BOOT_IMG" == "true" ]; then
-    find . -maxdepth 1 -name 'boot.img' -type f -exec mv {} "$ZIP_DIR/$zipsubdir/" \; &>> "$DEBUG_LOG"
+    find . -maxdepth 1 -name 'boot.img' -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
   fi 
 }
 
 # Remove old zips and logs
 function cleanup() {
+  local device=$1
   if [ "$DELETE_OLD_ZIPS" -gt "0" ]; then
     if [ "$ZIP_SUBDIR" == "true" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $distro_ver -N 1 "$ZIP_DIR/$zipsubdir"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 "$ZIP_DIR/$ZIP_SUB_DIR"
     else
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $distro_ver -N 1 -c $codename "$ZIP_DIR"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 -c $device "$ZIP_DIR"
     fi
   fi
   if [ "$DELETE_OLD_LOGS" -gt "0" ]; then
     if [ "$LOGS_SUBDIR" == "true" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $distro_ver -N 1 "$LOGS_DIR/$logsubdir"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 "$LOGS_DIR/$LOG_SUB_DIR"
     else
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $distro_ver -N 1 -c $codename "$LOGS_DIR"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 -c $device "$LOGS_DIR"
     fi
   fi
 }
@@ -486,7 +496,8 @@ function unmount_overlay() {
 function cleanup_outdir() {
   [ "$CLEAN_AFTER_BUILD" != "true" ] && return
 
-  out "Cleaning source dir for device $codename" | tee -a "$DEBUG_LOG"
+  local device=$1
+  out "Cleaning source dir for device $device" | tee -a "$DEBUG_LOG"
   if [ "$BUILD_OVERLAY" == "true" ]; then
     pushd "$TMP_DIR" &>> "$DEBUG_LOG"
     rm -rf device workdir merged
@@ -516,32 +527,31 @@ function cleanup_logs() {
 
 devices=${DEVICE_LIST//,/ }
 branches=${BRANCH_NAME//,/ }
-repo_log="$LOGS_DIR/repo-$(date +%Y%m%d).log"
-builddate=$(date +%Y%m%d)
+REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
+BUILD_DATE=$(date +%Y%m%d)
 
 # cd to working directory
 cd "$SRC_DIR"
 
+# Generic prepare steps
 exec_user_script begin
-
 wipe_outdir
-
 repo_migrate
-
 mirror_init
 
+# Main loop over all branches to be built
 for branch in $branches; do
-  branch_dir=$(sed 's/[^[:alnum:]]/_/g' <<< $branch)
-  branch_dir=${branch_dir^^}
+  BRANCH_DIR=$(sed 's/[^[:alnum:]]/_/g' <<< $branch)
+  BRANCH_DIR=${BRANCH_DIR^^}
 
-  cd "$SRC_DIR/$branch_dir"
-  start_branch_build
+  cd "$SRC_DIR/$BRANCH_DIR"
+  start_branch_build $branch $devices
   repo_reset
-  repo_init
+  repo_init $branch
   copy_local_manifests
-  copy_muppets_manifests
+  copy_muppets_manifests $branch
   repo_sync
-  get_android_version
+  get_android_version $branch
   get_vendor_version
   setup_vendor_overlay
   patch_signature_spoofing
@@ -554,7 +564,7 @@ for branch in $branches; do
 
   for device in $devices; do
     [ "$device" == "" ] && continue
-    DEBUG_LOG="$LOGS_DIR/$device/$vendor-$distro_ver-$builddate-$RELEASE_TYPE-$device.log"
+    DEBUG_LOG="$LOGS_DIR/$device/$VENDOR-$DISTRO_VER-$BUILD_DATE-$RELEASE_TYPE-$device.log"
     if [ "$(user_script_exists before)" == "true" ]; then
       breakfast $device
       exec_user_script before $device
@@ -562,14 +572,14 @@ for branch in $branches; do
     mirror_update
     mount_overlay
     cd "$source_dir"
-    make_dirs
+    make_dirs $device
     exec_user_script pre-build $device
-    build_device $device
-    cleanup
+    build_device $branch $device
+    cleanup $device
     exec_user_script post-build $device $build_successful
     out "Finishing build for $device" | tee -a "$DEBUG_LOG"
     unmount_overlay
-    cleanup_outdir
+    cleanup_outdir $device
   done
 done
 
