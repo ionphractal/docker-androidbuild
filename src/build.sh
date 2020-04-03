@@ -26,6 +26,7 @@ function die() {
   exit 1
 }
 
+# Execute a user script
 function exec_user_script() {
   local script="${BUILD_SCRIPTS_PATH}/userscripts/${1}.sh"
   shift
@@ -35,12 +36,15 @@ function exec_user_script() {
   fi
 }
 
+# Check if a user script is present
 function user_script_exists() {
   local script="${BUILD_SCRIPTS_PATH}/userscripts/${1}.sh"
   if [ -f "$script" ]; then
-    return true
+    echo true
+    return 0
   else
-    return false
+    echo false
+    return 1
   fi
 }
 
@@ -66,6 +70,7 @@ function repo_migrate() {
   find . -maxdepth 1 ! -name "$branch_dir" ! -path . -exec mv {} "$branch_dir" \;
 }
 
+# Sync local source mirror
 function mirror_sync() {
   [ "$LOCAL_MIRROR" != "true" ] && return
 
@@ -75,6 +80,20 @@ function mirror_sync() {
   popd &>> "$DEBUG_LOG"
 }
 
+# Download TheMuppets proprietary files manifest to current directory/repo
+# Applies to: LineageOS only
+function download_proprietary() {
+  [ "$INCLUDE_PROPRIETARY" != "true" ] && return
+
+  local themuppets_manifest=${1:-mirror/default.xml}
+  wget -q -O .repo/local_manifests/proprietary.xml "https://raw.githubusercontent.com/TheMuppets/manifests/${themuppets_manifest}"
+  /usr/bin/python3 "${BUILD_SCRIPTS_PATH}/build_manifest.py" \
+    --remote "https://gitlab.com" \
+    --remotename "gitlab_https" \
+    "https://gitlab.com/the-muppets/manifest/raw/${themuppets_manifest}" .repo/local_manifests/proprietary_gitlab.xml
+}
+
+# Initialize local mirror
 function mirror_init() {
   [ "$LOCAL_MIRROR" != "true" ] && return
 
@@ -82,7 +101,7 @@ function mirror_init() {
 
   if [ ! -d .repo ]; then
     out "Initializing mirror repository" | tee -a "$repo_log"
-    yes | repo init -u https://github.com/LineageOS/mirror --mirror --no-clone-bundle -p linux &>> "$repo_log"
+    yes | repo init -u ${MIRROR:-https://github.com/${ORG_NAME}/mirror} --mirror --no-clone-bundle -p linux &>> "$repo_log"
   fi
 
   # Copy local manifests to the appropriate folder in order take them into consideration
@@ -91,27 +110,22 @@ function mirror_init() {
   rsync -a --delete --include '*.xml' --exclude '*' "$LMANIFEST_DIR/" .repo/local_manifests/
 
   rm -f .repo/local_manifests/proprietary.xml
-  if [ "$INCLUDE_PROPRIETARY" == "true" ]; then
-    wget -q -O .repo/local_manifests/proprietary.xml "https://raw.githubusercontent.com/TheMuppets/manifests/mirror/default.xml"
-    /usr/bin/python "${BUILD_SCRIPTS_PATH}/build_manifest.py" \
-      --remote "https://gitlab.com" \
-      --remotename "gitlab_https" \
-      "https://gitlab.com/the-muppets/manifest/raw/mirror/default.xml" .repo/local_manifests/proprietary_gitlab.xml
-  fi
+  download_proprietary "mirror/default.xml"
 
   mirror_sync
   popd &>> "$DEBUG_LOG"
 }
 
+# Make source directory for the current branch and devices to build
 function start_branch_build() {
   mkdir -p "$SRC_DIR/$branch_dir"
   out "Branch :  $branch"
   out "Devices:  $devices"
 }
 
-# Remove previous changes of vendor/cm, vendor/lineage and frameworks/base (if they exist)
+# Remove previous changes of vendor/cm, vendor/lineage, vendor/${VENDOR_NAME} and frameworks/base (if they exist)
 function repo_reset() {
-  for path in "vendor/cm" "vendor/lineage" "frameworks/base"; do
+  for path in "vendor/cm" "vendor/lineage" "vendor/${VENDOR_NAME}" "frameworks/base"; do
     if [ -d "$path" ]; then
       pushd "$path" &>> "$DEBUG_LOG"
       git reset -q --hard
@@ -121,12 +135,13 @@ function repo_reset() {
   done
 }
 
+# Initialize repo sources
 function repo_init() {
   out "(Re)initializing branch repository" | tee -a "$repo_log"
   if [ "$LOCAL_MIRROR" == "true" ]; then
-    yes | repo init -u https://github.com/LineageOS/android.git --reference "$MIRROR_DIR" -b "$branch" &>> "$repo_log"
+    yes | repo init -u ${REPO:-https://github.com/${ORG_NAME}/android.git} --reference "$MIRROR_DIR" -b "$branch" &>> "$repo_log"
   else
-    yes | repo init -u https://github.com/LineageOS/android.git -b "$branch" &>> "$repo_log"
+    yes | repo init -u ${REPO:-https://github.com/${ORG_NAME}/android.git} -b "$branch" &>> "$repo_log"
   fi
 }
 
@@ -137,6 +152,8 @@ function copy_local_manifests() {
   rsync -a --delete --include '*.xml' --exclude '*' "$LMANIFEST_DIR/" .repo/local_manifests/
 }
 
+# Copy all TheMuppets manifests into the repo.
+# Applies to: LineageOS only
 function copy_muppets_manifests() {
   rm -f .repo/local_manifests/proprietary.xml
   [ "$INCLUDE_PROPRIETARY" != "true" ] && return
@@ -157,13 +174,11 @@ function copy_muppets_manifests() {
     themuppets_branch=lineage-15.1
     out "Can't find a matching branch on github.com/TheMuppets, using $themuppets_branch"
   fi
-  wget -q -O .repo/local_manifests/proprietary.xml "https://raw.githubusercontent.com/TheMuppets/manifests/$themuppets_branch/muppets.xml"
-  /usr/bin/python "${BUILD_SCRIPTS_PATH}/build_manifest.py" \
-    --remote "https://gitlab.com" \
-    --remotename "gitlab_https" \
-    "https://gitlab.com/the-muppets/manifest/raw/$themuppets_branch/muppets.xml" .repo/local_manifests/proprietary_gitlab.xml
+
+  download_proprietary "$themuppets_branch/muppets.xml"
 }
 
+# Sync current branch repo
 function repo_sync() {
   out "Syncing branch repository" | tee -a "$repo_log"
   pushd "$SRC_DIR/$branch_dir" &>> "$DEBUG_LOG"
@@ -171,6 +186,7 @@ function repo_sync() {
   popd &>> "$DEBUG_LOG"
 }
 
+# Get current android version from source
 function get_android_version() {
   platform_code=$(sed -n -e 's/^\s*DEFAULT_PLATFORM_VERSION := //p' build/core/version_defaults.mk)
   android_version=$(sed -n -e 's/^\s*PLATFORM_VERSION\.'$platform_code' := //p' build/core/version_defaults.mk)
@@ -184,9 +200,10 @@ function get_android_version() {
   fi
 }
 
+# Get current vendor version
 function get_vendor_version() {
   if [ "$android_version_major" -ge "8" ]; then
-    vendor="lineage"
+    vendor="${VENDOR_NAME}"
   else
     vendor="cm"
   fi
@@ -195,9 +212,9 @@ function get_vendor_version() {
     die "ERROR: Missing \"vendor/$vendor\", aborting"
   fi
 
-  los_ver_major=$(sed -n -e 's/^\s*PRODUCT_VERSION_MAJOR = //p' "vendor/$vendor/config/common.mk")
-  los_ver_minor=$(sed -n -e 's/^\s*PRODUCT_VERSION_MINOR = //p' "vendor/$vendor/config/common.mk")
-  los_ver="$los_ver_major.$los_ver_minor"
+  distro_ver_major=$(sed -n -e 's/^\s*PRODUCT_VERSION_MAJOR = //p' "vendor/$vendor/config/common.mk")
+  distro_ver_minor=$(sed -n -e 's/^\s*PRODUCT_VERSION_MINOR = //p' "vendor/$vendor/config/common.mk")
+  distro_ver="$distro_ver_major.$distro_ver_minor"
 }
 
 # Set up our overlay
@@ -213,7 +230,7 @@ function patch_signature_spoofing() {
   fi
 
   # Determine which patch should be applied to the current Android source tree
-  patch_name=""
+  local patch_name=""
   case $android_version in
     4.4*  )    patch_name="android_frameworks_base-KK-LP.patch" ;;
     5.*   )    patch_name="android_frameworks_base-KK-LP.patch" ;;
@@ -225,7 +242,7 @@ function patch_signature_spoofing() {
   esac
 
   if ! [ -z $patch_name ]; then
-    pushd frameworks/base &>> "$DEBUG_LOG"
+    pushd frameworks/base
     if [ "$SIGNATURE_SPOOFING" == "yes" ]; then
       out "Applying the standard signature spoofing patch ($patch_name) to frameworks/base"
       out "WARNING: the standard signature spoofing patch introduces a security threat"
@@ -235,7 +252,7 @@ function patch_signature_spoofing() {
       sed 's/android:protectionLevel="dangerous"/android:protectionLevel="signature|privileged"/' "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name" | patch --quiet -p1
     fi
     git clean -q -f
-    popd &>> "$DEBUG_LOG"
+    popd
 
     # Override device-specific settings for the location providers
     mkdir -p "vendor/$vendor/overlay/microg/frameworks/base/core/res/res/values/"
@@ -249,17 +266,17 @@ function patch_unifiednlp() {
   [ "$SUPPORT_UNIFIEDNLP" != "true" ] && return
 
   # Determine which patch should be applied to the current Android source tree
-  patch_name=""
+  local patch_name=""
   case $android_version in
     10*  )    patch_name="android_frameworks_base-Q.patch" ;;
   esac
 
   if ! [ -z $patch_name ]; then
-    pushd frameworks/base &>> "$DEBUG_LOG"
+    pushd frameworks/base
       out "Applying location services patch"
       patch --quiet -p1 -i "${BUILD_SCRIPTS_PATH}/location_services_patches/$patch_name"
     git clean -q -f
-    popd &>> "$DEBUG_LOG"
+    popd
   else
     die "ERROR: can't find a unifiednlp support patch for the current Android version ($android_version)"
   fi
@@ -352,67 +369,67 @@ function make_dirs() {
   else
     logsubdir=
   fi
-
-  DEBUG_LOG="$LOGS_DIR/$logsubdir/lineage-$los_ver-$builddate-$RELEASE_TYPE-$codename.log"
 }
 
 function build_device() {
-  local codename=$1
-  out "Starting build for $codename, $branch branch" | tee -a "$DEBUG_LOG"
+  local device=$1
+  out "Starting build for $device, $branch branch" | tee -a "$DEBUG_LOG"
   build_successful=false
-  if brunch $codename &>> "$DEBUG_LOG"; then
+  if brunch $device &>> "$DEBUG_LOG"; then
     currentdate=$(date +%Y%m%d)
-    fix_build_date
-    build_delta
+    fix_build_date $device
+    build_delta $device
     make_checksum
     copy_zips
     copy_boot
     build_successful=true
   else
-    out "Failed build for $codename" | tee -a "$DEBUG_LOG"
+    out "Failed build for $device" | tee -a "$DEBUG_LOG"
   fi
 }
 
 function fix_build_date() {
+  local device=$1
   if [ "$builddate" != "$currentdate" ]; then
-    find out/target/product/$codename -maxdepth 1 -name "lineage-*-$currentdate-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $currentdate $builddate \; &>> "$DEBUG_LOG"
+    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$currentdate-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $currentdate $builddate \; &>> "$DEBUG_LOG"
   fi
 }
 
 function build_delta() {
   [ "$BUILD_DELTA" != "true" ] && return
+  local device=$1
 
-  if [ -d "delta_last/$codename/" ]; then
+  if [ -d "delta_last/$device/" ]; then
     # If not the first build, create delta files
-    out "Generating delta files for $codename" | tee -a "$DEBUG_LOG"
+    out "Generating delta files for $device" | tee -a "$DEBUG_LOG"
     pushd /src/delta &>> "$DEBUG_LOG"
     export HOME_OVERRIDE=/src \
     export BIN_XDELTA=xdelta3 \
-    export FILE_MATCH=lineage-*.zip
-    export PATH_CURRENT=$SRC_DIR/$branch_dir/out/target/product/$codename
-    export PATH_LAST=$SRC_DIR/$branch_dir/delta_last/$codename
-    export KEY_X509=$KEYS_DIR/releasekey.x509.pem
-    export KEY_PK8=$KEYS_DIR/releasekey.pk8
-    if ./opendelta.sh $codename &>> "$DEBUG_LOG"; then
-      out "Delta generation for $codename completed" | tee -a "$DEBUG_LOG"
+    export FILE_MATCH="${VENDOR_NAME}-*.zip"
+    export PATH_CURRENT="$SRC_DIR/$branch_dir/out/target/product/$device"
+    export PATH_LAST="$SRC_DIR/$branch_dir/delta_last/$device"
+    export KEY_X509="$KEYS_DIR/releasekey.x509.pem"
+    export KEY_PK8="$KEYS_DIR/releasekey.pk8"
+    if ./opendelta.sh $device &>> "$DEBUG_LOG"; then
+      out "Delta generation for $device completed" | tee -a "$DEBUG_LOG"
     else
-      out "Delta generation for $codename failed" | tee -a "$DEBUG_LOG"
+      out "Delta generation for $device failed" | tee -a "$DEBUG_LOG"
     fi
     if [ "$DELETE_OLD_DELTAS" -gt "0" ]; then
-      /usr/bin/python ${BUILD_SCRIPTS_PATH}/clean_up.py -n $DELETE_OLD_DELTAS -V $los_ver -N 1 "$DELTA_DIR/$codename" &>> $DEBUG_LOG
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_DELTAS -V $distro_ver -N 1 "$DELTA_DIR/$device" &>> $DEBUG_LOG
     fi
     popd &>> "$DEBUG_LOG"
   else
-    # If the first build, copy the current full zip in $source_dir/delta_last/$codename/
-    out "No previous build for $codename; using current build as base for the next delta" | tee -a "$DEBUG_LOG"
-    mkdir -p delta_last/$codename/ &>> "$DEBUG_LOG"
-    find out/target/product/$codename -maxdepth 1 -name 'lineage-*.zip' -type f -exec cp {} "$source_dir/delta_last/$codename/" \; &>> "$DEBUG_LOG"
+    # If the first build, copy the current full zip in $source_dir/delta_last/$device/
+    out "No previous build for $device; using current build as base for the next delta" | tee -a "$DEBUG_LOG"
+    mkdir -p delta_last/$device/ &>> "$DEBUG_LOG"
+    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*.zip" -type f -exec cp {} "$source_dir/delta_last/$device/" \; &>> "$DEBUG_LOG"
   fi
 }
 
 function make_checksum() {
   pushd out/target/product/$codename &>> "$DEBUG_LOG"
-  for build in lineage-*.zip; do
+  for build in ${VENDOR_NAME}-*.zip; do
     sha256sum "$build" > "$ZIP_DIR/$zipsubdir/$build.sha256sum"
   done
   popd &>> "$DEBUG_LOG"
@@ -421,7 +438,7 @@ function make_checksum() {
 # Move produced ZIP files to the main OUT directory
 function copy_zips() {
   out "Moving build artifacts for $codename to '$ZIP_DIR/$zipsubdir'" | tee -a "$DEBUG_LOG"
-  find . -maxdepth 1 -name 'lineage-*.zip*' -type f -exec mv {} "$ZIP_DIR/$zipsubdir/" \; &>> "$DEBUG_LOG"
+  find . -maxdepth 1 -name "${VENDOR_NAME}-*.zip*" -type f -exec mv {} "$ZIP_DIR/$zipsubdir/" \; &>> "$DEBUG_LOG"
 }
 
 function copy_boot() {
@@ -434,16 +451,16 @@ function copy_boot() {
 function cleanup() {
   if [ "$DELETE_OLD_ZIPS" -gt "0" ]; then
     if [ "$ZIP_SUBDIR" == "true" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $los_ver -N 1 "$ZIP_DIR/$zipsubdir"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $distro_ver -N 1 "$ZIP_DIR/$zipsubdir"
     else
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $los_ver -N 1 -c $codename "$ZIP_DIR"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $distro_ver -N 1 -c $codename "$ZIP_DIR"
     fi
   fi
   if [ "$DELETE_OLD_LOGS" -gt "0" ]; then
     if [ "$LOGS_SUBDIR" == "true" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $los_ver -N 1 "$LOGS_DIR/$logsubdir"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $distro_ver -N 1 "$LOGS_DIR/$logsubdir"
     else
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $los_ver -N 1 -c $codename "$LOGS_DIR"
+      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $distro_ver -N 1 -c $codename "$LOGS_DIR"
     fi
   fi
 }
@@ -485,7 +502,7 @@ function make_opendelta_builds_json() {
   [ -z "$OPENDELTA_BUILDS_JSON" ] && return
 
   out "Creating OpenDelta's builds JSON file (ZIP_DIR/$OPENDELTA_BUILDS_JSON)"
-  if [ "$ZIP_SUBDIR" !== "true" ]; then
+  if [ "$ZIP_SUBDIR" != "true" ]; then
     out "WARNING: OpenDelta requires zip builds separated per device! You should set ZIP_SUBDIR to true"
   fi
   /usr/bin/python "${BUILD_SCRIPTS_PATH}/opendelta_builds_json.py" "$ZIP_DIR" -o "$ZIP_DIR/$OPENDELTA_BUILDS_JSON"
@@ -531,12 +548,13 @@ for branch in $branches; do
   patch_unifiednlp
   set_release_type
   set_ota_url
-  add_custom_pachages
+  add_custom_packages
   setup_keys
   prepare_build_env
 
   for device in $devices; do
     [ "$device" == "" ] && continue
+    DEBUG_LOG="$LOGS_DIR/$device/$vendor-$distro_ver-$builddate-$RELEASE_TYPE-$device.log"
     if [ "$(user_script_exists before)" == "true" ]; then
       breakfast $device
       exec_user_script before $device
@@ -546,7 +564,7 @@ for branch in $branches; do
     cd "$source_dir"
     make_dirs
     exec_user_script pre-build $device
-    build_device $device $build_successful
+    build_device $device
     cleanup
     exec_user_script post-build $device $build_successful
     out "Finishing build for $device" | tee -a "$DEBUG_LOG"
