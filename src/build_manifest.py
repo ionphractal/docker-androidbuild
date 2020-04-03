@@ -19,10 +19,8 @@ from xml.dom import minidom
 import xml.etree.ElementTree as ET
 import argparse
 
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
+import urllib.request
+from urllib.request import Request
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Build an Android repo manifest')
@@ -33,7 +31,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    source_manifest = urlopen(args.url).read()
+    # bypass gitlab's 'bot'-protection
+    req = urllib.request.Request(args.url, headers={'User-Agent' : "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11"})
+    source_manifest = urllib.request.urlopen(req).read()
 
     xmlin = ET.fromstring(source_manifest)
     xmlout = ET.Element("manifest")
@@ -57,4 +57,4 @@ if __name__ == "__main__":
 
     xmlstr = minidom.parseString(ET.tostring(xmlout)).toprettyxml(indent="  ", encoding="UTF-8")
     with open(args.out, "w") as f:
-        f.write(xmlstr)
+        f.write(xmlstr.decode())
