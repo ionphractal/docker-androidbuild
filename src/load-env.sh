@@ -10,5 +10,10 @@ while read line; do
   grep -s -E "^[a-zA-Z]" <<<"$line" &>/dev/null || continue
   key=$(awk -F'=' '{print $1}' <<<"$line")
   value=${line#*=}
-  export $key="${!key:-$value}"
+  # remove all leading and following (single/double) quotes from value
+  value=$(sed -e "s#^['\"]##" -e "s#['\"]\$##" <<<"$value")
+  if [ -z "${!key}" ]; then
+    echo "Loading '$key' default value: $value"
+    export $key="${!key:-$value}"
+  fi
 done < <(cat .env)
