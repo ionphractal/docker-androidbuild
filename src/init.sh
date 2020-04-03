@@ -19,9 +19,7 @@
 
 # Copy the user scripts
 mkdir -p ${BUILD_SCRIPTS_PATH}/userscripts
-cp -r $USERSCRIPTS_DIR/. ${BUILD_SCRIPTS_PATH}/userscripts
-find ${BUILD_SCRIPTS_PATH}/userscripts ! -type d ! -user ${BUILD_USER} -exec echo ">> [$(date)] {} is not owned by ${BUILD_USER}, removing" \; -exec rm {} \;
-find ${BUILD_SCRIPTS_PATH}/userscripts ! -type d -perm /g=w,o=w -exec echo ">> [$(date)] {} is writable by world users, removing" \; -exec rm {} \;
+cp -u -b -r $USERSCRIPTS_DIR/. ${BUILD_SCRIPTS_PATH}/userscripts
 
 # Initialize CCache if it will be used
 if [ "$USE_CCACHE" = 1 ]; then
