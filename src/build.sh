@@ -247,7 +247,7 @@ function patch_signature_spoofing() {
   esac
 
   if ! [ -z $patch_name ]; then
-    pushd frameworks/base
+    pushd frameworks/base &>> "$DEBUG_LOG"
     if [ "$SIGNATURE_SPOOFING" == "yes" ]; then
       out "Applying the standard signature spoofing patch ($patch_name) to frameworks/base"
       out "WARNING: the standard signature spoofing patch introduces a security threat"
@@ -257,7 +257,7 @@ function patch_signature_spoofing() {
       sed 's/android:protectionLevel="dangerous"/android:protectionLevel="signature|privileged"/' "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name" | patch --quiet -p1
     fi
     git clean -q -f
-    popd
+    popd &>> "$DEBUG_LOG"
 
     # Override device-specific settings for the location providers
     mkdir -p "vendor/$VENDOR/overlay/microg/frameworks/base/core/res/res/values/"
@@ -277,11 +277,11 @@ function patch_unifiednlp() {
   esac
 
   if ! [ -z $patch_name ]; then
-    pushd frameworks/base
+    pushd frameworks/base &>> "$DEBUG_LOG"
       out "Applying location services patch"
       patch --quiet -p1 -i "${BUILD_SCRIPTS_PATH}/location_services_patches/$patch_name"
     git clean -q -f
-    popd
+    popd &>> "$DEBUG_LOG"
   else
     die "ERROR: can't find a unifiednlp support patch for the current Android version ($ANDROID_VERSION)"
   fi
@@ -528,6 +528,7 @@ function cleanup_logs() {
 devices=${DEVICE_LIST//,/ }
 branches=${BRANCH_NAME//,/ }
 REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
+DEBUG_LOG="$REPO_LOG"
 BUILD_DATE=$(date +%Y%m%d)
 
 # cd to working directory
