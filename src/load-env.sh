@@ -12,6 +12,8 @@ while read line; do
   value=${line#*=}
   # remove all leading and following (single/double) quotes from value
   value=$(sed -e "s#^['\"]##" -e "s#['\"]\$##" <<<"$value")
+  # interpolate variables
+  value=$(eval "echo $value")
   if [ -z "${!key}" ]; then
     echo "Loading '$key' default value: $value"
     export $key="${!key:-$value}"
