@@ -85,6 +85,7 @@ function mirror_sync() {
 function download_proprietary() {
   [ "$INCLUDE_PROPRIETARY" != "true" ] && return
 
+  out "Downloading proprietary manifests"
   local themuppets_manifest=${1:-mirror/default.xml}
   wget -q -O .repo/local_manifests/proprietary.xml "https://raw.githubusercontent.com/TheMuppets/manifests/${themuppets_manifest}"
   /usr/bin/python3 "${BUILD_SCRIPTS_PATH}/build_manifest.py" \
@@ -128,6 +129,7 @@ function start_branch_build() {
 # Remove previous changes of vendor/cm, vendor/lineage, vendor/${VENDOR_NAME} and frameworks/base (if they exist)
 function repo_reset() {
   for path in "vendor/cm" "vendor/lineage" "vendor/${VENDOR_NAME}" "frameworks/base"; do
+    out "Resetting repo '$path'"
     if [ -d "$path" ]; then
       pushd "$path" &>> "$DEBUG_LOG"
       git reset -q --hard
@@ -161,6 +163,7 @@ function copy_muppets_manifests() {
   rm -f .repo/local_manifests/proprietary.xml
   [ "$INCLUDE_PROPRIETARY" != "true" ] && return
 
+  out "Copying proprietary manifests"
   local branch=$1
   if [[ $branch =~ .*cm\-13\.0.* ]]; then
     themuppets_branch=cm-13.0
@@ -192,22 +195,24 @@ function repo_sync() {
 
 # Get current android version from source
 function get_android_version() {
+  out "Getting android version from source"
   local branch=$1
   local platform_code=$(sed -n -e 's/^\s*DEFAULT_PLATFORM_VERSION := //p' build/core/version_defaults.mk)
   ANDROID_VERSION=$(sed -n -e 's/^\s*PLATFORM_VERSION\.'$platform_code' := //p' build/core/version_defaults.mk)
   if [ -z $ANDROID_VERSION ]; then
     die "Can't detect the android version"
   fi
-  $ANDROID_VERSION_MAJOR=$(cut -d '.' -f 1 <<< $ANDROID_VERSION)
+  ANDROID_VERSION_MAJOR=$(cut -d '.' -f 1 <<< $ANDROID_VERSION)
 
-  if [ "$$ANDROID_VERSION_MAJOR" -lt "7" ]; then
+  if [ "$ANDROID_VERSION_MAJOR" -lt "7" ]; then
     die "ERROR: $branch requires a JDK version too old (< 8); aborting"
   fi
 }
 
 # Get current vendor version
 function get_vendor_version() {
-  if [ "$$ANDROID_VERSION_MAJOR" -ge "8" ]; then
+  out "Getting vendor version from source"
+  if [ "$ANDROID_VERSION_MAJOR" -ge "8" ]; then
     VENDOR="${VENDOR_NAME}"
   else
     VENDOR="cm"
@@ -224,6 +229,7 @@ function get_vendor_version() {
 
 # Set up our overlay
 function setup_vendor_overlay() {
+  out "Setting up overlay"
   mkdir -p "vendor/$VENDOR/overlay/microg/"
   sed -i "1s;^;PRODUCT_PACKAGE_OVERLAYS := vendor/$VENDOR/overlay/microg\n;" "vendor/$VENDOR/config/common.mk"
 }
@@ -326,11 +332,11 @@ function setup_keys() {
   # Soong (Android 9+) complains if the signing keys are outside the build path
   ln -sf "$KEYS_DIR" user-keys
 
-  if [ "$$ANDROID_VERSION_MAJOR" -lt "10" ]; then
+  if [ "$ANDROID_VERSION_MAJOR" -lt "10" ]; then
     sed -i "1s;^;PRODUCT_DEFAULT_DEV_CERTIFICATE := user-keys/releasekey\nPRODUCT_OTA_PUBLIC_KEYS := user-keys/releasekey\nPRODUCT_EXTRA_RECOVERY_KEYS := user-keys/releasekey\n\n;" "vendor/$VENDOR/config/common.mk"
   fi
 
-  if [ "$$ANDROID_VERSION_MAJOR" -ge "10" ]; then
+  if [ "$ANDROID_VERSION_MAJOR" -ge "10" ]; then
     sed -i "1s;^;PRODUCT_DEFAULT_DEV_CERTIFICATE := user-keys/releasekey\nPRODUCT_OTA_PUBLIC_KEYS := user-keys/releasekey\n\n;" "vendor/$VENDOR/config/common.mk"
   fi
 }
@@ -342,6 +348,7 @@ function prepare_build_env() {
 }
 
 function mirror_update() {
+  out "Updating local mirror"
   CURRENT_DATE=$(date +%Y%m%d)
   if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
     # Sync the source code
@@ -353,16 +360,18 @@ function mirror_update() {
 
 function mount_overlay() {
   if [ "$BUILD_OVERLAY" == "true" ]; then
+    out "Mounting temporary overlay"
     mkdir -p "$TMP_DIR/device" "$TMP_DIR/workdir" "$TMP_DIR/merged"
     sudo mount -t overlay overlay -o lowerdir="$SRC_DIR/$BRANCH_DIR",upperdir="$TMP_DIR/device",workdir="$TMP_DIR/workdir" "$TMP_DIR/merged"
-    source_dir="$TMP_DIR/merged"
+    export SOURCE_DIR="$TMP_DIR/merged"
   else
-    source_dir="$SRC_DIR/$BRANCH_DIR"
+    export SOURCE_DIR="$SRC_DIR/$BRANCH_DIR"
   fi
 }
 
 function make_dirs() {
   local device=$1
+  out "Making zip and log subdirectories if missing"
   if [ "$ZIP_SUBDIR" == "true" ]; then
     ZIP_SUB_DIR=$device
     mkdir -p "$ZIP_DIR/$ZIP_SUB_DIR"
@@ -398,6 +407,7 @@ function build_device() {
 function fix_build_date() {
   local device=$1
   if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
+    out "Fixing build date"
     find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$CURRENT_DATE-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $CURRENT_DATE $BUILD_DATE \; &>> "$DEBUG_LOG"
   fi
 }
@@ -427,10 +437,10 @@ function build_delta() {
     fi
     popd &>> "$DEBUG_LOG"
   else
-    # If the first build, copy the current full zip in $source_dir/delta_last/$device/
+    # If the first build, copy the current full zip in $SOURCE_DIR/delta_last/$device/
     out "No previous build for $device; using current build as base for the next delta" | tee -a "$DEBUG_LOG"
     mkdir -p delta_last/$device/ &>> "$DEBUG_LOG"
-    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*.zip" -type f -exec cp {} "$source_dir/delta_last/$device/" \; &>> "$DEBUG_LOG"
+    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*.zip" -type f -exec cp {} "$SOURCE_DIR/delta_last/$device/" \; &>> "$DEBUG_LOG"
   fi
 }
 
@@ -438,6 +448,7 @@ function make_checksum() {
   local device=$1
   pushd out/target/product/$device &>> "$DEBUG_LOG"
   for build in ${VENDOR_NAME}-*.zip; do
+    out "Making sha256sum of $build"
     sha256sum "$build" > "$ZIP_DIR/$ZIP_SUB_DIR/$build.sha256sum"
   done
   popd &>> "$DEBUG_LOG"
@@ -452,6 +463,7 @@ function copy_zips() {
 
 function copy_boot() {
   if [ "$BOOT_IMG" == "true" ]; then
+    out "Copying boot to zip directory"
     find . -maxdepth 1 -name 'boot.img' -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
   fi 
 }
@@ -460,6 +472,7 @@ function copy_boot() {
 function cleanup() {
   local device=$1
   if [ "$DELETE_OLD_ZIPS" -gt "0" ]; then
+    out "Cleaning up zips"
     if [ "$ZIP_SUBDIR" == "true" ]; then
       /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 "$ZIP_DIR/$ZIP_SUB_DIR"
     else
@@ -467,6 +480,7 @@ function cleanup() {
     fi
   fi
   if [ "$DELETE_OLD_LOGS" -gt "0" ]; then
+    out "Cleaning up logs"
     if [ "$LOGS_SUBDIR" == "true" ]; then
       /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 "$LOGS_DIR/$LOG_SUB_DIR"
     else
@@ -478,6 +492,7 @@ function cleanup() {
 function unmount_overlay() {
   [ "$BUILD_OVERLAY" != "true" ] && return
 
+  out "Unmounting temporary overlay"
   # The Jack server must be stopped manually, as we want to unmount $TMP_DIR/merged
   pushd "$TMP_DIR" &>> "$DEBUG_LOG"
   if [ -f "$TMP_DIR/merged/prebuilts/sdk/tools/jack-admin" ]; then
@@ -502,7 +517,7 @@ function cleanup_outdir() {
     pushd "$TMP_DIR" &>> "$DEBUG_LOG"
     rm -rf device workdir merged
   else
-    pushd "$source_dir" &>> "$DEBUG_LOG"
+    pushd "$SOURCE_DIR" &>> "$DEBUG_LOG"
     mka clean &>> "$DEBUG_LOG"
   fi
   popd &>> "$DEBUG_LOG"
@@ -521,6 +536,7 @@ function make_opendelta_builds_json() {
 
 function cleanup_logs() {
   if [ "$DELETE_OLD_LOGS" -gt "0" ]; then
+    out "Cleaning up logs"
     find "$LOGS_DIR" -maxdepth 1 -name repo-*.log | sort | head -n -$DELETE_OLD_LOGS | xargs -r rm
   fi
 }
@@ -528,7 +544,7 @@ function cleanup_logs() {
 devices=${DEVICE_LIST//,/ }
 branches=${BRANCH_NAME//,/ }
 REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
-DEBUG_LOG="$REPO_LOG"
+export DEBUG_LOG="$REPO_LOG"
 BUILD_DATE=$(date +%Y%m%d)
 
 # cd to working directory
@@ -543,7 +559,7 @@ mirror_init
 # Main loop over all branches to be built
 for branch in $branches; do
   BRANCH_DIR=$(sed 's/[^[:alnum:]]/_/g' <<< $branch)
-  BRANCH_DIR=${BRANCH_DIR^^}
+  export BRANCH_DIR=${BRANCH_DIR^^}
 
   cd "$SRC_DIR/$BRANCH_DIR"
   start_branch_build $branch $devices
@@ -572,7 +588,7 @@ for branch in $branches; do
     fi
     mirror_update
     mount_overlay
-    cd "$source_dir"
+    cd "$SOURCE_DIR"
     make_dirs $device
     exec_user_script pre-build $branch $device
     build_device $branch $device
