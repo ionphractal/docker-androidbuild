@@ -567,16 +567,16 @@ for branch in $branches; do
     DEBUG_LOG="$LOGS_DIR/$device/$VENDOR-$DISTRO_VER-$BUILD_DATE-$RELEASE_TYPE-$device.log"
     if [ "$(user_script_exists before)" == "true" ]; then
       breakfast $device
-      exec_user_script before $device
+      exec_user_script before $branch $device
     fi
     mirror_update
     mount_overlay
     cd "$source_dir"
     make_dirs $device
-    exec_user_script pre-build $device
+    exec_user_script pre-build $branch $device
     build_device $branch $device
     cleanup $device
-    exec_user_script post-build $device $build_successful
+    exec_user_script post-build $branch $device $build_successful
     out "Finishing build for $device" | tee -a "$DEBUG_LOG"
     unmount_overlay
     cleanup_outdir $device
