@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sudo chown ${BUILD_USER_ID}:${BUILD_USER_GID} /srv/*
+
 # Load environment variables which have not been set already
 pushd "${BUILD_SCRIPTS_PATH}" &> /dev/null
 SCRIPT_DIR=$(pwd)
