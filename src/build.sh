@@ -426,7 +426,7 @@ function build_delta() {
   if [ -d "delta_last/$device/" ]; then
     # If not the first build, create delta files
     out "Generating delta files for $device" | tee -a "$DEBUG_LOG"
-    pushd /srv/delta &>> "$DEBUG_LOG"
+    pushd /srv/tools/delta &>> "$DEBUG_LOG"
     export HOME_OVERRIDE=/srv \
     export BIN_XDELTA=xdelta3 \
     export FILE_MATCH="${VENDOR_NAME}-*.zip"
@@ -447,7 +447,7 @@ function build_delta() {
     # If the first build, copy the current full zip in $SOURCE_DIR/delta_last/$device/
     out "No previous build for $device; using current build as base for the next delta" | tee -a "$DEBUG_LOG"
     mkdir -p delta_last/$device/ &>> "$DEBUG_LOG"
-    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*.zip" -type f -exec cp {} "$SOURCE_DIR/delta_last/$device/" \; &>> "$DEBUG_LOG"
+    find "out/target/product/$device" -maxdepth 1 -name ${VENDOR_NAME}-*.zip -type f -exec cp {} "$SOURCE_DIR/delta_last/$device/" \; &>> "$DEBUG_LOG"
   fi
 }
 
@@ -465,13 +465,13 @@ function make_checksum() {
 function copy_zips() {
   local device=$1
   out "Moving build artifacts for $device to '$ZIP_DIR/$ZIP_SUB_DIR'" | tee -a "$DEBUG_LOG"
-  find . -maxdepth 1 -name "${VENDOR_NAME}-*.zip*" -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
+  find "${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device" -maxdepth 1 -name ${VENDOR_NAME}-*.zip* -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
 }
 
 function copy_boot() {
   if [ "$BOOT_IMG" == "true" ]; then
     out "Copying boot to zip directory"
-    find . -maxdepth 1 -name 'boot.img' -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
+    find "${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device" -maxdepth 1 -name boot.img -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
   fi 
 }
 
