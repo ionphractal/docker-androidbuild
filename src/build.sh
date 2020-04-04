@@ -30,7 +30,7 @@ function die() {
 function exec_user_script() {
   local script="${BUILD_SCRIPTS_PATH}/userscripts/${1}.sh"
   [ ! -f "$script" ] && return
-  if stat -c '%U' "$script" | grep -s "${BUILD_USER}"; then
+  if stat -c '%U' "$script" | grep -qv "${BUILD_USER}"; then
     out "WARNING: User script '$script' is not owned by build user. Skipping insecure script..."
     return
   fi
