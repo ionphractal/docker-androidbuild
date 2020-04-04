@@ -426,8 +426,8 @@ function build_delta() {
   if [ -d "delta_last/$device/" ]; then
     # If not the first build, create delta files
     out "Generating delta files for $device" | tee -a "$DEBUG_LOG"
-    pushd /src/delta &>> "$DEBUG_LOG"
-    export HOME_OVERRIDE=/src \
+    pushd /srv/delta &>> "$DEBUG_LOG"
+    export HOME_OVERRIDE=/srv \
     export BIN_XDELTA=xdelta3 \
     export FILE_MATCH="${VENDOR_NAME}-*.zip"
     export PATH_CURRENT="$SRC_DIR/$BRANCH_DIR/out/target/product/$device"
