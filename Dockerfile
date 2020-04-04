@@ -38,7 +38,8 @@ ENV MIRROR_DIR=/srv/mirror \
     DELTA_DIR=/srv/delta \
     KEYS_DIR=/srv/keys \
     LOGS_DIR=/srv/logs \
-    USERSCRIPTS_DIR=/srv/userscripts
+    USERSCRIPTS_DIR=/srv/userscripts \
+    PREBUILTS_DIR=/srv/prebuilts
 
 VOLUME [ \
   ${MIRROR_DIR} \
@@ -51,7 +52,17 @@ VOLUME [ \
   ${KEYS_DIR} \
   ${LOGS_DIR} \
   ${USERSCRIPTS_DIR} \
+  ${PREBUILTS_DIR} \
 ]
+
+# Set work directory and entrypoint
+###################################
+WORKDIR $SRC_DIR
+ENTRYPOINT ["bash", "-c", "/entrypoint.sh"]
+
+# Allow redirection of stdout to docker logs
+############################################
+RUN ln -sf /proc/1/fd/1 /var/log/docker.log
 
 # Create build user and copy required files
 ###########################################
@@ -70,17 +81,10 @@ RUN groupadd -g ${BUILD_USER_GID} ${BUILD_USER} \
  && mkdir -p ${BUILD_SCRIPTS_PATH} \
  && chown -R ${BUILD_USER}:${BUILD_USER} /src /srv \
  && echo "android-build ALL = (root) NOPASSWD: /bin/mount" >> /etc/sudoers \
- && echo "android-build ALL = (root) NOPASSWD: /bin/umount" >> /etc/sudoers
+ && echo "android-build ALL = (root) NOPASSWD: /bin/umount" >> /etc/sudoers \
+ && echo "android-build ALL = (root) NOPASSWD: /bin/chown" >> /etc/sudoers
 
-# Allow redirection of stdout to docker logs
-############################################
-RUN ln -sf /proc/1/fd/1 /var/log/docker.log
-
-# Set the work directory and build user
-#######################################
+# Set container user
+####################
 USER ${BUILD_USER}
 ENV USER=${BUILD_USER}
-
-WORKDIR $SRC_DIR
-
-ENTRYPOINT ["bash", "-c", "/entrypoint.sh"]
