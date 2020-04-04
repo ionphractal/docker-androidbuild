@@ -16,11 +16,10 @@ RUN dpkg --add-architecture i386 \
 
 # Download and build tools
 ##########################
-RUN mkdir -p /srv/bin \
- && cd /srv/ \
- && wget 'https://storage.googleapis.com/git-repo-downloads/repo' -P /srv/bin \
- && chmod +x /srv/bin/repo \
- && mkdir delta \
+RUN mkdir -p /srv/tools/bin /srv/tools/delta \
+ && cd /srv/tools \
+ && wget 'https://storage.googleapis.com/git-repo-downloads/repo' -P /srv/tools/bin \
+ && chmod +x /srv/tools/bin/repo \
  && git clone --depth=1 https://github.com/ionphractal/android_packages_apps_OpenDelta.git OpenDelta \
  && gcc -o delta/zipadjust OpenDelta/jni/zipadjust.c OpenDelta/jni/zipadjust_run.c -lz \
  && cp OpenDelta/server/minsignapk.jar OpenDelta/server/opendelta.sh delta/ \
@@ -71,7 +70,7 @@ ENV ANDROID_JACK_VM_ARGS="-Xmx10g -Dfile.encoding=UTF-8 -XX:+TieredCompilation" 
     BUILD_USER_ID=1000 \
     BUILD_USER_GID=1000 \
     BUILD_SCRIPTS_PATH=/srv/scripts \
-    PATH="/srv/bin:$PATH"
+    PATH="/srv/tools/bin:$PATH"
 
 COPY entrypoint.sh /
 COPY src/ ${BUILD_SCRIPTS_PATH}
