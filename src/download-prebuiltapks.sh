@@ -11,6 +11,7 @@ function git_base_url() {
 }
 
 pushd "$SRC_DIR/$BRANCH_DIR" &>> "$DEBUG_LOG"
+[ -d prebuilts/prebuiltapks ] && rm -Rf prebuilts/prebuiltapks
 mkdir -p prebuilts/prebuiltapks
 while read git_url git_branch app_list; do
   [ -z "$git_url" ] && continue
