@@ -427,7 +427,7 @@ function build_delta() {
     # If not the first build, create delta files
     out "Generating delta files for $device" | tee -a "$DEBUG_LOG"
     pushd /srv/tools/delta &>> "$DEBUG_LOG"
-    export HOME_OVERRIDE=/srv \
+    export HOME_OVERRIDE=/srv/tools \
     export BIN_XDELTA=xdelta3 \
     export FILE_MATCH="${VENDOR_NAME}-*.zip"
     export PATH_CURRENT="$SRC_DIR/$BRANCH_DIR/out/target/product/$device"
