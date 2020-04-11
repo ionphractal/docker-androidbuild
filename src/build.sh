@@ -125,12 +125,28 @@ function mirror_init() {
 }
 
 # Make source directory for the current branch and devices to build
-function start_branch_build() {
+function prepare_branch_build() {
   local branch=$1; shift
   local devices="$@"
   mkdir -p "$SRC_DIR/$BRANCH_DIR"
   out "Branch :  $branch"
   out "Devices:  $devices"
+
+  repo_reset
+  repo_init $branch
+  copy_local_manifests
+  copy_muppets_manifests $branch
+  repo_sync
+  get_android_version $branch
+  get_vendor_version
+  setup_vendor_overlay
+  patch_signature_spoofing
+  patch_unifiednlp
+  set_release_type
+  set_ota_url
+  add_custom_packages
+  setup_keys
+  prepare_build_env
 }
 
 # Remove previous changes of vendor/cm, vendor/lineage, vendor/${VENDOR_NAME} and frameworks/base (if they exist)
@@ -595,25 +611,9 @@ mirror_init
 for branch in $branches; do
   BRANCH_DIR=$(sed 's/[^[:alnum:]]/_/g' <<< $branch)
   export BRANCH_DIR=${BRANCH_DIR^^}
+  prepare_branch_build $branch $devices
 
   cd "$SRC_DIR/$BRANCH_DIR"
-  start_branch_build $branch $devices
-  repo_reset
-  repo_init $branch
-  copy_local_manifests
-  copy_muppets_manifests $branch
-  repo_sync
-  get_android_version $branch
-  get_vendor_version
-  setup_vendor_overlay
-  patch_signature_spoofing
-  patch_unifiednlp
-  set_release_type
-  set_ota_url
-  add_custom_packages
-  setup_keys
-  prepare_build_env
-
   build_devices $devices
 done
 
