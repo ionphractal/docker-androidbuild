@@ -529,6 +529,7 @@ function prepare_branch_build() {
   out "Branch :  $branch"
   out "Devices:  $devices"
 
+  cd "$SRC_DIR/$BRANCH_DIR"
   repo_reset
   repo_init $branch
   copy_local_manifests
@@ -574,10 +575,11 @@ function build_devices() {
       breakfast $device
       exec_user_script before $branch $device
     fi
+    make_dirs $device
+    cd "$SOURCE_DIR"
+
     mirror_update
     mount_overlay
-    cd "$SOURCE_DIR"
-    make_dirs $device
     exec_user_script pre-build $branch $device
 
     # Build device
@@ -600,7 +602,6 @@ function build_all_branches() {
     export BRANCH_DIR=${BRANCH_DIR^^}
     prepare_branch_build $branch $devices
 
-    cd "$SRC_DIR/$BRANCH_DIR"
     build_devices $devices
   done
 }
