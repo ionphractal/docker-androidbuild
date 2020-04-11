@@ -548,6 +548,34 @@ function build_device() {
   fi
 }
 
+function build_devices() {
+  local devices=$@
+  for device in $devices; do
+    [ "$device" == "" ] && continue
+    # Device preparation steps
+    DEBUG_LOG="$LOGS_DIR/$device/$VENDOR-$DISTRO_VER-$BUILD_DATE-$RELEASE_TYPE-$device.log"
+    if [ "$(user_script_exists before)" == "true" ]; then
+      breakfast $device
+      exec_user_script before $branch $device
+    fi
+    mirror_update
+    mount_overlay
+    cd "$SOURCE_DIR"
+    make_dirs $device
+    exec_user_script pre-build $branch $device
+
+    # Build device
+    build_device $branch $device
+
+    # Device cleanup steps
+    cleanup $device
+    exec_user_script post-build $branch $device $build_successful
+    out "Finishing build for $device" | tee -a "$DEBUG_LOG"
+    unmount_overlay
+    cleanup_outdir $device
+  done
+}
+
 devices=${DEVICE_LIST//,/ }
 branches=${BRANCH_NAME//,/ }
 REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
@@ -586,27 +614,10 @@ for branch in $branches; do
   setup_keys
   prepare_build_env
 
-  for device in $devices; do
-    [ "$device" == "" ] && continue
-    DEBUG_LOG="$LOGS_DIR/$device/$VENDOR-$DISTRO_VER-$BUILD_DATE-$RELEASE_TYPE-$device.log"
-    if [ "$(user_script_exists before)" == "true" ]; then
-      breakfast $device
-      exec_user_script before $branch $device
-    fi
-    mirror_update
-    mount_overlay
-    cd "$SOURCE_DIR"
-    make_dirs $device
-    exec_user_script pre-build $branch $device
-    build_device $branch $device
-    cleanup $device
-    exec_user_script post-build $branch $device $build_successful
-    out "Finishing build for $device" | tee -a "$DEBUG_LOG"
-    unmount_overlay
-    cleanup_outdir $device
-  done
+  build_devices $devices
 done
 
+# Generic cleanup steps
 make_opendelta_builds_json
 cleanup_logs
 exec_user_script end
