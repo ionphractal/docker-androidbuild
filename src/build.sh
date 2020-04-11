@@ -415,7 +415,7 @@ function fix_build_date() {
   local device=$1
   if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
     out "Fixing build date"
-    find out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$CURRENT_DATE-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $CURRENT_DATE $BUILD_DATE \; &>> "$DEBUG_LOG"
+    find $SRC_DIR/$BRANCH_DIR/out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$CURRENT_DATE-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $CURRENT_DATE $BUILD_DATE \; &>> "$DEBUG_LOG"
   fi
 }
 
@@ -447,13 +447,13 @@ function build_delta() {
     # If the first build, copy the current full zip in $SOURCE_DIR/delta_last/$device/
     out "No previous build for $device; using current build as base for the next delta" | tee -a "$DEBUG_LOG"
     mkdir -p delta_last/$device/ &>> "$DEBUG_LOG"
-    find "out/target/product/$device" -maxdepth 1 -name ${VENDOR_NAME}-*.zip -type f -exec cp {} "$SOURCE_DIR/delta_last/$device/" \; &>> "$DEBUG_LOG"
+    find $SRC_DIR/$BRANCH_DIR/out/target/product/$device -maxdepth 1 -name ${VENDOR_NAME}-*.zip -type f -exec cp {} "$SOURCE_DIR/delta_last/$device/" \; &>> "$DEBUG_LOG"
   fi
 }
 
 function make_checksum() {
   local device=$1
-  pushd out/target/product/$device &>> "$DEBUG_LOG"
+  pushd ${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device &>> "$DEBUG_LOG"
   for build in ${VENDOR_NAME}-*.zip; do
     out "Making sha256sum of $build"
     sha256sum "$build" > "$ZIP_DIR/$ZIP_SUB_DIR/$build.sha256sum"
@@ -465,13 +465,13 @@ function make_checksum() {
 function copy_zips() {
   local device=$1
   out "Moving build artifacts for $device to '$ZIP_DIR/$ZIP_SUB_DIR'" | tee -a "$DEBUG_LOG"
-  find "${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device" -maxdepth 1 -name ${VENDOR_NAME}-*.zip* -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
+  find ${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device -maxdepth 1 -name ${VENDOR_NAME}-*.zip* -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
 }
 
 function copy_boot() {
   if [ "$BOOT_IMG" == "true" ]; then
     out "Copying boot to zip directory"
-    find "${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device" -maxdepth 1 -name boot.img -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
+    find ${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device -maxdepth 1 -name boot.img -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
   fi 
 }
 
