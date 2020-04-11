@@ -1,7 +1,8 @@
 #!/bin/bash
 
-if [ ! -f ".env" ]; then
-  echo "No '.env'"
+env_file="${BUILD_SCRIPTS_PATH}/build-env"
+if [ ! -f "$env_file" ]; then
+  echo "ERROR: Env variable file can't be loaded. '$env_file' not accessible."
   exit 1
 fi
 
@@ -18,4 +19,4 @@ while read line; do
     echo "Loading '$key' default value: $value"
     export $key="${!key:-$value}"
   fi
-done < <(cat .env)
+done < <(cat "$env_file")
