@@ -592,11 +592,23 @@ function build_devices() {
   done
 }
 
-devices=${DEVICE_LIST//,/ }
-branches=${BRANCH_NAME//,/ }
-REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
+function build_all_branches() {
+  local branches=${BRANCH_NAME//,/ }
+  local devices=${DEVICE_LIST//,/ }
+  for branch in $branches; do
+    BRANCH_DIR=$(sed 's/[^[:alnum:]]/_/g' <<< $branch)
+    export BRANCH_DIR=${BRANCH_DIR^^}
+    prepare_branch_build $branch $devices
+
+    cd "$SRC_DIR/$BRANCH_DIR"
+    build_devices $devices
+  done
+}
+
+# Initialize repo and debug log
+export REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
 export DEBUG_LOG="$REPO_LOG"
-BUILD_DATE=$(date +%Y%m%d)
+export BUILD_DATE=$(date +%Y%m%d)
 
 # cd to working directory
 cd "$SRC_DIR"
@@ -608,14 +620,7 @@ repo_migrate
 mirror_init
 
 # Main loop over all branches to be built
-for branch in $branches; do
-  BRANCH_DIR=$(sed 's/[^[:alnum:]]/_/g' <<< $branch)
-  export BRANCH_DIR=${BRANCH_DIR^^}
-  prepare_branch_build $branch $devices
-
-  cd "$SRC_DIR/$BRANCH_DIR"
-  build_devices $devices
-done
+build_all_branches
 
 # Generic cleanup steps
 make_opendelta_builds_json
