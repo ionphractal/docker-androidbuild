@@ -393,24 +393,6 @@ function make_dirs() {
   fi
 }
 
-function build_device() {
-  local branch=$1
-  local device=$2
-  out "Starting build for $device, $branch branch" | tee -a "$DEBUG_LOG"
-  build_successful=false
-  if brunch $device &>> "$DEBUG_LOG"; then
-    CURRENT_DATE=$(date +%Y%m%d)
-    fix_build_date $device
-    build_delta $device
-    make_checksum $device
-    copy_zips $device
-    copy_boot
-    build_successful=true
-  else
-    out "Failed build for $device" | tee -a "$DEBUG_LOG"
-  fi
-}
-
 function fix_build_date() {
   local device=$1
   if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
@@ -545,6 +527,24 @@ function cleanup_logs() {
   if [ "$DELETE_OLD_LOGS" -gt "0" ]; then
     out "Cleaning up logs"
     find "$LOGS_DIR" -maxdepth 1 -name repo-*.log | sort | head -n -$DELETE_OLD_LOGS | xargs -r rm
+  fi
+}
+
+function build_device() {
+  local branch=$1
+  local device=$2
+  out "Starting build for $device, $branch branch" | tee -a "$DEBUG_LOG"
+  build_successful=false
+  if brunch $device &>> "$DEBUG_LOG"; then
+    CURRENT_DATE=$(date +%Y%m%d)
+    fix_build_date $device
+    build_delta $device
+    make_checksum $device
+    copy_zips $device
+    copy_boot
+    build_successful=true
+  else
+    out "Failed build for $device" | tee -a "$DEBUG_LOG"
   fi
 }
 
