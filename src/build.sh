@@ -534,7 +534,7 @@ function build_device() {
   local branch=$1
   local device=$2
   out "Starting build for $device, $branch branch" | tee -a "$DEBUG_LOG"
-  build_successful=false
+  export DEVICE_BUILD_SUCCESSFUL=false
   if brunch $device &>> "$DEBUG_LOG"; then
     CURRENT_DATE=$(date +%Y%m%d)
     fix_build_date $device
@@ -542,7 +542,7 @@ function build_device() {
     make_checksum $device
     copy_zips $device
     copy_boot
-    build_successful=true
+    DEVICE_BUILD_SUCCESSFUL=true
   else
     out "Failed build for $device" | tee -a "$DEBUG_LOG"
   fi
@@ -569,7 +569,7 @@ function build_devices() {
 
     # Device cleanup steps
     cleanup $device
-    exec_user_script post-build $branch $device $build_successful
+    exec_user_script post-build $branch $device $DEVICE_BUILD_SUCCESSFUL
     out "Finishing build for $device" | tee -a "$DEBUG_LOG"
     unmount_overlay
     cleanup_outdir $device
