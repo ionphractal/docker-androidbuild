@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function load_env() {
-  local env_file="${BUILD_SCRIPTS_PATH}/build-env"
+  local env_file="${BUILD_SCRIPTS_PATH}/flavors/${BUILD_FLAVOR:-microg}/build-env"
   if [ ! -f "$env_file" ]; then
     echo "ERROR: Env variable file can't be loaded. '$env_file' not accessible."
     exit 1
