@@ -124,29 +124,15 @@ function mirror_init() {
   popd &>> "$DEBUG_LOG"
 }
 
-# Make source directory for the current branch and devices to build
-function prepare_branch_build() {
-  local branch=$1; shift
-  local devices="$@"
-  mkdir -p "$SRC_DIR/$BRANCH_DIR"
-  out "Branch :  $branch"
-  out "Devices:  $devices"
-
-  repo_reset
-  repo_init $branch
-  copy_local_manifests
-  copy_muppets_manifests $branch
-  repo_sync
-  get_android_version $branch
-  get_vendor_version
-  setup_vendor_overlay
-  patch_signature_spoofing
-  patch_unifiednlp
-  set_release_type
-  set_ota_url
-  add_custom_packages
-  setup_keys
-  prepare_build_env
+function mirror_update() {
+  CURRENT_DATE=$(date +%Y%m%d)
+  if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
+    out "Updating local mirror"
+    # Sync the source code
+    BUILD_DATE=$CURRENT_DATE
+    mirror_sync
+    repo_sync
+  fi
 }
 
 # Remove previous changes of vendor/cm, vendor/lineage, vendor/${VENDOR_NAME} and frameworks/base (if they exist)
@@ -370,17 +356,6 @@ function prepare_build_env() {
   source build/envsetup.sh > /dev/null
 }
 
-function mirror_update() {
-  out "Updating local mirror"
-  CURRENT_DATE=$(date +%Y%m%d)
-  if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
-    # Sync the source code
-    BUILD_DATE=$CURRENT_DATE
-    mirror_sync
-    repo_sync
-  fi
-}
-
 function mount_overlay() {
   if [ "$BUILD_OVERLAY" == "true" ]; then
     out "Mounting temporary overlay"
@@ -544,6 +519,31 @@ function cleanup_logs() {
     out "Cleaning up logs"
     find "$LOGS_DIR" -maxdepth 1 -name repo-*.log | sort | head -n -$DELETE_OLD_LOGS | xargs -r rm
   fi
+}
+
+# Make source directory for the current branch and devices to build
+function prepare_branch_build() {
+  local branch=$1; shift
+  local devices="$@"
+  mkdir -p "$SRC_DIR/$BRANCH_DIR"
+  out "Branch :  $branch"
+  out "Devices:  $devices"
+
+  repo_reset
+  repo_init $branch
+  copy_local_manifests
+  copy_muppets_manifests $branch
+  repo_sync
+  get_android_version $branch
+  get_vendor_version
+  setup_vendor_overlay
+  patch_signature_spoofing
+  patch_unifiednlp
+  set_release_type
+  set_ota_url
+  add_custom_packages
+  setup_keys
+  prepare_build_env
 }
 
 function build_device() {
