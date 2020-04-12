@@ -245,7 +245,8 @@ function setup_vendor_overlay() {
 
 # If needed, apply the microG's signature spoofing patch
 function patch_signature_spoofing() {
-  if [ "$SIGNATURE_SPOOFING" != "yes" ] || [ "$SIGNATURE_SPOOFING" != "restricted" ]; then
+  out "Signature spoofing: $SIGNATURE_SPOOFING"
+  if [ "$SIGNATURE_SPOOFING" != "yes" -a "$SIGNATURE_SPOOFING" != "restricted" ]; then
     return
   fi
 
@@ -435,7 +436,7 @@ function make_checksum() {
 }
 
 # Move produced ZIP files to the main OUT directory
-function copy_zips() {
+function copy_artifacts() {
   local device=$1
   out "Moving build artifacts for $device to '$ZIP_DIR/$ZIP_SUB_DIR'" | tee -a "$DEBUG_LOG"
   find ${SRC_DIR}/${BRANCH_DIR}/out/target/product/$device -maxdepth 1 -name ${VENDOR_NAME}-*.zip* -type f -exec mv {} "$ZIP_DIR/$ZIP_SUB_DIR/" \; &>> "$DEBUG_LOG"
@@ -557,7 +558,7 @@ function build_device() {
     fix_build_date $device
     build_delta $device
     make_checksum $device
-    copy_zips $device
+    copy_artifacts $device
     copy_boot
     DEVICE_BUILD_SUCCESSFUL=true
   else
