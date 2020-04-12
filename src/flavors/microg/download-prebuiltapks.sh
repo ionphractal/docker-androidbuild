@@ -25,6 +25,8 @@ while read git_url git_branch app_list; do
     pushd "$git_name" &>> "$DEBUG_LOG"
     git fetch --all &>> "$DEBUG_LOG"
     git checkout "$git_branch" &>> "$DEBUG_LOG"
+    git reset --hard &>> "$DEBUG_LOG"
+    git pull &>> "$DEBUG_LOG"
     popd &>> "$DEBUG_LOG"
   fi
   popd &>> "$DEBUG_LOG"
