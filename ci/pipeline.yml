@@ -1,0 +1,180 @@
+resources:
+- name: git-docker-androidbuild
+  type: git
+  icon: github-circle
+  source:
+    uri: git@github.com:ionphractal/docker-androidbuild.git
+    branch: master
+    private_key: ((git.github_private_key))
+    git_config:
+      user.name: ((git.user))
+      user.email: ((git.email))
+- name: docker-baseimage
+  type: registry-image
+  icon: docker
+  source:
+    repository: ubuntu
+    tag: 18.04
+- name: docker-androidbuild
+  type: registry-image
+  icon: docker
+  source:
+    repository: ionphractal/docker-androidbuild
+    username: ((dockerhub.username))
+    password: ((dockerhub.password))
+- name: docker-androidbuild-local-pipeline
+  type: registry-image
+  icon: docker
+  source:
+    repository: registry.local:5000/ionphractal/docker-androidbuild-pipeline
+    tag: latest
+- name: git-repo-tool
+  type: git
+  icon: github-circle
+  source:
+    uri: https://gerrit.googlesource.com/git-repo/
+    tag_filter: v[0-9].[0-9]*
+- name: git-lineageos-mirror
+  type: git
+  icon: github-circle
+  source:
+    uri: https://github.com/LineageOS/mirror.git
+- name: git-proprietary-muppets
+  type: git
+  icon: github-circle
+  source:
+    uri: https://github.com/TheMuppets/manifests.git
+- name: git-proprietary-muppets-gitlab
+  type: git
+  icon: github-circle
+  source:
+    uri: https://gitlab.com/the-muppets/manifest.git
+
+jobs:
+- name: update-build-image
+  serial_groups:
+  - io-intensive
+  - android-build
+  plan:
+  - in_parallel:
+    - get: git-docker-androidbuild
+      trigger: true
+    - get: docker-baseimage
+      trigger: true
+    - get: git-repo-tool
+      trigger: true
+    # - get: git-delta-tool
+    #   trigger: true
+  - task: build
+    privileged: true
+    config:
+      platform: linux
+
+      image_resource:
+        type: registry-image
+        source:
+          repository: vito/oci-build-task
+
+      caches:
+      - path: cache
+
+      inputs:
+      - name: git-docker-androidbuild
+
+      outputs:
+      - name: image
+
+      params:
+        CONTEXT: git-docker-androidbuild
+
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          echo "Building public image"
+          build
+          mv image/image.tar image/image-public.tar
+
+          echo "Adding tools for the pipeline"
+          sed -i -e "/^USER /i\RUN apt update -y && apt dist-upgrade -y && apt install -y cifs-utils" git-docker-androidbuild/Dockerfile
+          
+          echo "Building pipeline image"
+          build
+          mv image/image.tar image/image-pipeline.tar
+  - in_parallel:
+    - put: docker-androidbuild
+      params:
+        image: image/image-public.tar
+    - put: docker-androidbuild-local-pipeline
+      params:
+        image: image/image-pipeline.tar
+
+# update the local mirror when there is a reason to
+- name: sync-mirror
+  serial_groups:
+  - io-intensive
+  plan:
+  - in_parallel:
+    - get: git-docker-androidbuild
+      trigger: false
+    - get: docker-androidbuild-local-pipeline
+      trigger: false
+    - get: git-lineageos-mirror
+      trigger: true
+    - get: git-proprietary-muppets
+      trigger: true
+    - get: git-proprietary-muppets-gitlab
+      trigger: true
+    # - get: git-local-manifests
+    #   trigger: true
+  
+  - task: sync-repo
+    # must be privileged or else mount does not work :/
+    privileged: true
+    config:
+      platform: linux
+
+      image_resource:
+        type: registry-image
+        source:
+          repository: registry.local:5000/ionphractal/docker-androidbuild-pipeline
+
+      inputs:
+      - name: git-docker-androidbuild
+      - name: git-lineageos-mirror
+      - name: git-proprietary-muppets
+      - name: git-proprietary-muppets-gitlab
+      # - name: git-local-manifests
+
+      params:
+        SAMBA_SHARE: ((samba.share))
+        SAMBA_WORKGROUP: ((samba.workgroup))
+        SAMBA_USERNAME: ((samba.username))
+        SAMBA_PASSWORD: ((samba.password))
+
+      run:
+        user: root
+        path: bash
+        args:
+        - -c
+        - |
+          # set required env vars and source/import build functions
+          export BUILD_SCRIPTS_PATH="$(pwd)/git-docker-androidbuild/src"
+          export BUILD_FLAVOR_SCRIPTS_PATH="${BUILD_SCRIPTS_PATH}/flavors/${BUILD_FLAVOR:-microg}"
+          export LOCAL_MIRROR=true
+          export LMANIFEST_DIR=$(pwd)/git-local-manifests
+          export MIRROR_DIR=$(pwd)/mirror
+          . "${BUILD_SCRIPTS_PATH}/load-env.sh"
+          . "${BUILD_FLAVOR_SCRIPTS_PATH}/build.sh"
+
+          export REPO_LOG=/proc/1/fd/1
+          export DEBUG_LOG=${REPO_LOG}
+
+          mkdir -p ${LMANIFEST_DIR}
+          mkdir -p ${MIRROR_DIR}
+
+          # mount mirror directory
+          mount -t cifs -o username=${SAMBA_USERNAME},workgroup=${SAMBA_WORKGROUP},password=${SAMBA_PASSWORD} ${SAMBA_SHARE} ${MIRROR_DIR}
+
+          mirror_init
