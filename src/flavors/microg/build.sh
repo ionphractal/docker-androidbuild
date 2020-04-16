@@ -28,7 +28,7 @@ function die() {
 
 # Execute a user script
 function exec_user_script() {
-  local script="${BUILD_SCRIPTS_PATH}/userscripts/${1}.sh"
+  local script="${BUILD_FLAVOR_SCRIPTS_PATH}/userscripts/${1}.sh"
   [ ! -f "$script" ] && return
   if stat -c '%U' "$script" | grep -qv "${BUILD_USER}"; then
     out "WARNING: User script '$script' is not owned by build user. Skipping insecure script..."
@@ -45,7 +45,7 @@ function exec_user_script() {
 
 # Check if a user script is present
 function user_script_exists() {
-  local script="${BUILD_SCRIPTS_PATH}/userscripts/${1}.sh"
+  local script="${BUILD_FLAVOR_SCRIPTS_PATH}/userscripts/${1}.sh"
   if [ -f "$script" ]; then
     echo true
     return 0
@@ -95,7 +95,7 @@ function download_proprietary() {
   out "Downloading proprietary manifests"
   local themuppets_manifest=${1:-mirror/default.xml}
   wget -q -O .repo/local_manifests/proprietary.xml "https://raw.githubusercontent.com/TheMuppets/manifests/${themuppets_manifest}"
-  /usr/bin/python3 "${BUILD_SCRIPTS_PATH}/build_manifest.py" \
+  /usr/bin/python3 "${BUILD_FLAVOR_SCRIPTS_PATH}/build_manifest.py" \
     --remote "https://gitlab.com" \
     --remotename "gitlab_https" \
     "https://gitlab.com/the-muppets/manifest/raw/${themuppets_manifest}" .repo/local_manifests/proprietary_gitlab.xml
@@ -267,17 +267,17 @@ function patch_signature_spoofing() {
     if [ "$SIGNATURE_SPOOFING" == "yes" ]; then
       out "Applying the standard signature spoofing patch ($patch_name) to frameworks/base"
       out "WARNING: the standard signature spoofing patch introduces a security threat"
-      patch --quiet -p1 -i "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name"
+      patch --quiet -p1 -i "${BUILD_FLAVOR_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name"
     else
       out "Applying the restricted signature spoofing patch (based on $patch_name) to frameworks/base"
-      sed 's/android:protectionLevel="dangerous"/android:protectionLevel="signature|privileged"/' "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name" | patch --quiet -p1
+      sed 's/android:protectionLevel="dangerous"/android:protectionLevel="signature|privileged"/' "${BUILD_FLAVOR_SCRIPTS_PATH}/signature_spoofing_patches/$patch_name" | patch --quiet -p1
     fi
     git clean -q -f
     popd &>> "$DEBUG_LOG"
 
     # Override device-specific settings for the location providers
     mkdir -p "vendor/$VENDOR/overlay/microg/frameworks/base/core/res/res/values/"
-    cp "${BUILD_SCRIPTS_PATH}/signature_spoofing_patches/frameworks_base_config.xml" "vendor/$VENDOR/overlay/microg/frameworks/base/core/res/res/values/config.xml"
+    cp "${BUILD_FLAVOR_SCRIPTS_PATH}/signature_spoofing_patches/frameworks_base_config.xml" "vendor/$VENDOR/overlay/microg/frameworks/base/core/res/res/values/config.xml"
   else
     die "ERROR: can't find a suitable signature spoofing patch for the current Android version ($ANDROID_VERSION)"
   fi
@@ -295,7 +295,7 @@ function patch_unifiednlp() {
   if ! [ -z $patch_name ]; then
     pushd frameworks/base &>> "$DEBUG_LOG"
       out "Applying location services patch"
-      patch --quiet -p1 -i "${BUILD_SCRIPTS_PATH}/location_services_patches/$patch_name"
+      patch --quiet -p1 -i "${BUILD_FLAVOR_SCRIPTS_PATH}/location_services_patches/$patch_name"
     git clean -q -f
     popd &>> "$DEBUG_LOG"
   else
@@ -318,10 +318,10 @@ function set_ota_url() {
 
   if [ -n "$(grep updater_server_url packages/apps/Updater/res/values/strings.xml)" ]; then
     # "New" updater configuration: full URL (with placeholders {device}, {type} and {incr})
-    sed "s|{name}|updater_server_url|g; s|{url}|$OTA_URL/v1/{device}/{type}/{incr}|g" "${BUILD_SCRIPTS_PATH}/packages_updater_strings.xml" > "$updater_url_overlay_dir/strings.xml"
+    sed "s|{name}|updater_server_url|g; s|{url}|$OTA_URL/v1/{device}/{type}/{incr}|g" "${BUILD_FLAVOR_SCRIPTS_PATH}/packages_updater_strings.xml" > "$updater_url_overlay_dir/strings.xml"
   elif [ -n "$(grep conf_update_server_url_def packages/apps/Updater/res/values/strings.xml)" ]; then
     # "Old" updater configuration: just the URL
-    sed "s|{name}|conf_update_server_url_def|g; s|{url}|$OTA_URL|g" "${BUILD_SCRIPTS_PATH}/packages_updater_strings.xml" > "$updater_url_overlay_dir/strings.xml"
+    sed "s|{name}|conf_update_server_url_def|g; s|{url}|$OTA_URL|g" "${BUILD_FLAVOR_SCRIPTS_PATH}/packages_updater_strings.xml" > "$updater_url_overlay_dir/strings.xml"
   else
     die "ERROR: no known Updater URL property found"
   fi
@@ -389,7 +389,7 @@ function fix_build_date() {
   local device=$1
   if [ "$BUILD_DATE" != "$CURRENT_DATE" ]; then
     out "Fixing build date"
-    find $SRC_DIR/$BRANCH_DIR/out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$CURRENT_DATE-*.zip*" -type f -exec sh "${BUILD_SCRIPTS_PATH}/fix_build_date.sh" {} $CURRENT_DATE $BUILD_DATE \; &>> "$DEBUG_LOG"
+    find $SRC_DIR/$BRANCH_DIR/out/target/product/$device -maxdepth 1 -name "${VENDOR_NAME}-*-$CURRENT_DATE-*.zip*" -type f -exec sh "${BUILD_FLAVOR_SCRIPTS_PATH}/fix_build_date.sh" {} $CURRENT_DATE $BUILD_DATE \; &>> "$DEBUG_LOG"
   fi
 }
 
@@ -414,7 +414,7 @@ function build_delta() {
       out "Delta generation for $device failed" | tee -a "$DEBUG_LOG"
     fi
     if [ "$DELETE_OLD_DELTAS" -gt "0" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_DELTAS -V $DISTRO_VER -N 1 "$DELTA_DIR/$device" &>> $DEBUG_LOG
+      /usr/bin/python "${BUILD_FLAVOR_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_DELTAS -V $DISTRO_VER -N 1 "$DELTA_DIR/$device" &>> $DEBUG_LOG
     fi
     popd &>> "$DEBUG_LOG"
   else
@@ -455,17 +455,17 @@ function cleanup() {
   if [ "$DELETE_OLD_ZIPS" -gt "0" ]; then
     out "Cleaning up zips"
     if [ "$ZIP_SUBDIR" == "true" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 "$ZIP_DIR/$ZIP_SUB_DIR"
+      /usr/bin/python "${BUILD_FLAVOR_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 "$ZIP_DIR/$ZIP_SUB_DIR"
     else
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 -c $device "$ZIP_DIR"
+      /usr/bin/python "${BUILD_FLAVOR_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_ZIPS -V $DISTRO_VER -N 1 -c $device "$ZIP_DIR"
     fi
   fi
   if [ "$DELETE_OLD_LOGS" -gt "0" ]; then
     out "Cleaning up logs"
     if [ "$LOGS_SUBDIR" == "true" ]; then
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 "$LOGS_DIR/$LOG_SUB_DIR"
+      /usr/bin/python "${BUILD_FLAVOR_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 "$LOGS_DIR/$LOG_SUB_DIR"
     else
-      /usr/bin/python "${BUILD_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 -c $device "$LOGS_DIR"
+      /usr/bin/python "${BUILD_FLAVOR_SCRIPTS_PATH}/clean_up.py" -n $DELETE_OLD_LOGS -V $DISTRO_VER -N 1 -c $device "$LOGS_DIR"
     fi
   fi
 }
@@ -512,7 +512,7 @@ function make_opendelta_builds_json() {
   if [ "$ZIP_SUBDIR" != "true" ]; then
     out "WARNING: OpenDelta requires zip builds separated per device! You should set ZIP_SUBDIR to true"
   fi
-  /usr/bin/python "${BUILD_SCRIPTS_PATH}/opendelta_builds_json.py" "$ZIP_DIR" -o "$ZIP_DIR/$OPENDELTA_BUILDS_JSON"
+  /usr/bin/python "${BUILD_FLAVOR_SCRIPTS_PATH}/opendelta_builds_json.py" "$ZIP_DIR" -o "$ZIP_DIR/$OPENDELTA_BUILDS_JSON"
 }
 
 function cleanup_logs() {
@@ -607,24 +607,27 @@ function build_all_branches() {
   done
 }
 
+function main() {
+  # Generic prepare steps
+  export BUILD_DATE=$(date +%Y%m%d)
+  cd "$SRC_DIR"
+  exec_user_script begin
+  wipe_outdir
+  repo_migrate
+  mirror_init
+
+  # Main loop over all branches to be built
+  build_all_branches
+
+  # Generic cleanup steps
+  make_opendelta_builds_json
+  cleanup_logs
+  exec_user_script end
+}
+
 # Initialize repo and debug log
 export REPO_LOG="$LOGS_DIR/repo-$(date +%Y%m%d).log"
 export DEBUG_LOG="$REPO_LOG"
-export BUILD_DATE=$(date +%Y%m%d)
 
-# cd to working directory
-cd "$SRC_DIR"
-
-# Generic prepare steps
-exec_user_script begin
-wipe_outdir
-repo_migrate
-mirror_init
-
-# Main loop over all branches to be built
-build_all_branches
-
-# Generic cleanup steps
-make_opendelta_builds_json
-cleanup_logs
-exec_user_script end
+# Run main function only if executed
+$(return >/dev/null 2>&1) || main

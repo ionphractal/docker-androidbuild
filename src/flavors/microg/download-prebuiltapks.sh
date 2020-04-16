@@ -36,5 +36,5 @@ while read git_url git_branch app_list; do
       rsync -av --delete "${PREBUILTS_DIR}/$git_name/$app" prebuilts/prebuiltapks/ &>> "$DEBUG_LOG"
     fi
   done
-done < "$BUILD_SCRIPTS_PATH/prebuiltapks"
+done < "$BUILD_FLAVOR_SCRIPTS_PATH/prebuiltapks"
 popd &>> "$DEBUG_LOG"

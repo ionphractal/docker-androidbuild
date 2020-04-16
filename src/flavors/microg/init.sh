@@ -18,8 +18,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Copy the user scripts
-mkdir -p ${BUILD_SCRIPTS_PATH}/userscripts
-cp -u -b -r $USERSCRIPTS_DIR/. ${BUILD_SCRIPTS_PATH}/userscripts
+mkdir -p ${BUILD_FLAVOR_SCRIPTS_PATH}/userscripts
+cp -u -b -r $USERSCRIPTS_DIR/. ${BUILD_FLAVOR_SCRIPTS_PATH}/userscripts
 
 # Initialize CCache if it will be used
 if [ "$USE_CCACHE" = 1 ]; then
@@ -35,7 +35,7 @@ if [ "$SIGN_BUILDS" = true ]; then
     echo ">> [$(date)] SIGN_BUILDS = true but empty \$KEYS_DIR, generating new keys"
     for c in releasekey platform shared media networkstack; do
       echo ">> [$(date)]  Generating $c..."
-      ${BUILD_SCRIPTS_PATH}/make_key "$KEYS_DIR/$c" "$KEYS_SUBJECT" <<< '' &> /dev/null
+      ${BUILD_FLAVOR_SCRIPTS_PATH}/make_key "$KEYS_DIR/$c" "$KEYS_SUBJECT" <<< '' &> /dev/null
     done
   else
     for c in releasekey platform shared media networkstack; do
@@ -56,13 +56,13 @@ if [ "$SIGN_BUILDS" = true ]; then
 fi
 
 if [ "$CRONTAB_TIME" == "now" -o -z "$CRONTAB_TIME" ]; then
-  ${BUILD_SCRIPTS_PATH}/build.sh
+  ${BUILD_FLAVOR_SCRIPTS_PATH}/build.sh
 else
   # Initialize the cronjob
   cronFile=/tmp/buildcron
   printf "SHELL=/bin/bash\n" > $cronFile
   printenv -0 | sed -e 's/=\x0/=""\n/g'  | sed -e 's/\x0/\n/g' | sed -e "s/_=/PRINTENV=/g" >> $cronFile
-  printf "\n$CRONTAB_TIME /usr/bin/flock -n /var/lock/build.lock ${BUILD_SCRIPTS_PATH}/build.sh >> /var/log/docker.log 2>&1\n" >> $cronFile
+  printf "\n$CRONTAB_TIME /usr/bin/flock -n /var/lock/build.lock ${BUILD_FLAVOR_SCRIPTS_PATH}/build.sh >> /var/log/docker.log 2>&1\n" >> $cronFile
   crontab $cronFile
   rm $cronFile
 

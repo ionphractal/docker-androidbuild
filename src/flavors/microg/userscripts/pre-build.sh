@@ -2,4 +2,4 @@
 
 branch="$1"
 device="$2"
-bash "$BUILD_SCRIPTS_PATH/download-prebuiltapks.sh"
+bash "$BUILD_FLAVOR_SCRIPTS_PATH/download-prebuiltapks.sh"

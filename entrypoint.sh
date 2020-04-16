@@ -13,6 +13,6 @@ while read dir_variable; do
 done < <(env | grep -E "^[A-Z]+_DIR=")
 
 # Adjust build scripts path depending on what the user wants to build and run the flavor start script
-export BUILD_SCRIPTS_PATH=$(sed -e 's#/$##' <<<"${BUILD_SCRIPTS_PATH}/flavors/${BUILD_FLAVOR:-microg}")
+export BUILD_FLAVOR_SCRIPTS_PATH=${BUILD_SCRIPTS_PATH}/flavors/${BUILD_FLAVOR:-microg}"
 
-bash "${BUILD_SCRIPTS_PATH}/${BUILD_FLAVOR_START_SCRIPT:-init.sh}"
+bash "${BUILD_FLAVOR_SCRIPTS_PATH}/${BUILD_FLAVOR_START_SCRIPT:-init.sh}"
