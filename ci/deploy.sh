@@ -29,7 +29,7 @@ if [ ! -f $secrets ]; then
 fi
 source <(parse_yaml "$secrets")
 
-fly -t "$concourse_target" login --concourse-url "$concourse_url" -u "$concourse_username" -p "$concourse_password"
+fly -t "$concourse_target" login --concourse-url "$concourse_url" -u "$concourse_username" -p "$concourse_password" --team-name main
 [ "${1:-}" == "login" ] && exit 0
 
 echo -e "\nUpdating '$pipeline_name' from file 'pipeline.yml'"

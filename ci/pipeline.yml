@@ -97,8 +97,8 @@ jobs:
           mv image/image.tar image/image-public.tar
 
           echo "Adding tools for the pipeline"
-          sed -i -e "/^USER /i\RUN apt update -y && apt dist-upgrade -y && apt install -y cifs-utils" git-docker-androidbuild/Dockerfile
-          
+          sed -i -e "/^USER /i\RUN apt update -y && apt dist-upgrade -y && apt install -y nfs-common" git-docker-androidbuild/Dockerfile
+
           echo "Building pipeline image"
           build
           mv image/image.tar image/image-pipeline.tar
@@ -128,7 +128,7 @@ jobs:
       trigger: true
     # - get: git-local-manifests
     #   trigger: true
-  
+
   - task: sync-repo
     # must be privileged or else mount does not work :/
     privileged: true
@@ -148,10 +148,7 @@ jobs:
       # - name: git-local-manifests
 
       params:
-        SAMBA_SHARE: ((samba.share))
-        SAMBA_WORKGROUP: ((samba.workgroup))
-        SAMBA_USERNAME: ((samba.username))
-        SAMBA_PASSWORD: ((samba.password))
+        MIRROR_SHARE: ((mirror.share))
 
       run:
         user: root
@@ -159,6 +156,9 @@ jobs:
         args:
         - -c
         - |
+          # sudo chown -R 1000:1000 .
+          ls -lah
+
           # set required env vars and source/import build functions
           export BUILD_SCRIPTS_PATH="$(pwd)/git-docker-androidbuild/src"
           export BUILD_FLAVOR_SCRIPTS_PATH="${BUILD_SCRIPTS_PATH}/flavors/${BUILD_FLAVOR:-microg}"
@@ -168,13 +168,52 @@ jobs:
           . "${BUILD_SCRIPTS_PATH}/load-env.sh"
           . "${BUILD_FLAVOR_SCRIPTS_PATH}/build.sh"
 
-          export REPO_LOG=/proc/1/fd/1
+          export REPO_LOG=/dev/stdout
           export DEBUG_LOG=${REPO_LOG}
 
           mkdir -p ${LMANIFEST_DIR}
           mkdir -p ${MIRROR_DIR}
 
           # mount mirror directory
-          mount -t cifs -o username=${SAMBA_USERNAME},workgroup=${SAMBA_WORKGROUP},password=${SAMBA_PASSWORD} ${SAMBA_SHARE} ${MIRROR_DIR}
+          sudo mount -v ${MIRROR_SHARE} ${MIRROR_DIR}
 
           mirror_init
+
+- name: run-build
+  serial_groups:
+  - io-intensive
+  plan:
+  - in_parallel:
+    - get: git-lineageos-mirror
+      trigger: true
+      passed: [sync-mirror]
+    - get: git-proprietary-muppets
+      trigger: true
+      passed: [sync-mirror]
+    - get: git-proprietary-muppets-gitlab
+      trigger: true
+      passed: [sync-mirror]
+    # - get: git-local-manifests
+    #   trigger: true
+    #   passed: [sync-mirror]
+
+  - task: run-build
+    config:
+      platform: linux
+
+      image_resource:
+        type: registry-image
+        source:
+          repository: registry.local:5000/ionphractal/docker-androidbuild-pipeline
+
+      inputs:
+
+      params:
+        SSH_KEY: ((build-server.key))
+
+      run:
+        path: bash
+        args:
+        - -c
+        - |
+          ssh -l ((build-server.user)) -i <(echo "$SSH_KEY") ((build-server.host)) -c "bash /storage/android/docker/build.sh"
