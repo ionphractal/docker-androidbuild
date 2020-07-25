@@ -83,6 +83,9 @@ function mirror_sync() {
 
   out "Syncing mirror repository" | tee -a "$REPO_LOG"
   pushd "$MIRROR_DIR" &>> "$DEBUG_LOG"
+  pushd .repo/manifests &>> "$DEBUG_LOG"
+  git checkout .
+  popd &>> "$DEBUG_LOG"
   repo sync --force-sync --no-clone-bundle &>> "$REPO_LOG"
   popd &>> "$DEBUG_LOG"
 }
@@ -113,7 +116,7 @@ function mirror_init() {
   fi
 
   # Copy local manifests to the appropriate folder in order take them into consideration
-  out "Copying '$LMANIFEST_DIR/*.xml' to '.repo/local_manifests/'"
+  out "Copying '$LMANIFEST_DIR/*.xml' to '$(pwd)/.repo/local_manifests/'"
   mkdir -p .repo/local_manifests
   rsync -a --delete --include '*.xml' --exclude '*' "$LMANIFEST_DIR/" .repo/local_manifests/
 
