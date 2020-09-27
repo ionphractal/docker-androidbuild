@@ -34,6 +34,26 @@ resources:
   source:
     uri: https://gerrit.googlesource.com/git-repo/
     tag_filter: v[0-9].[0-9]*
+- name: git-lineageos-android
+  type: git
+  icon: github-circle
+  source:
+    uri: https://github.com/LineageOS/android.git
+- name: git-lineageos-android_vendor_lineage
+  type: git
+  icon: github-circle
+  source:
+    uri: https://github.com/LineageOS/android_vendor_lineage.git
+- name: git-lineageos-android_frameworks_base
+  type: git
+  icon: github-circle
+  source:
+    uri: https://github.com/LineageOS/android_frameworks_base.git
+- name: git-lineageos-android_device_sony_discovery
+  type: git
+  icon: github-circle
+  source:
+    uri: https://github.com/LineageOS/android_device_sony_discovery.git
 - name: git-lineageos-mirror
   type: git
   icon: github-circle
@@ -121,10 +141,16 @@ jobs:
     - get: docker-androidbuild-local-pipeline
       trigger: false
     - get: git-lineageos-mirror
+      params: {depth: 2}
       trigger: true
-    - get: git-proprietary-muppets
+    - get: git-lineageos-android
+      params: {depth: 2}
       trigger: true
-    - get: git-proprietary-muppets-gitlab
+    - get: git-lineageos-android_vendor_lineage
+      params: {depth: 2}
+      trigger: true
+    - get: git-lineageos-android_device_sony_discovery
+      params: {depth: 2}
       trigger: true
     # - get: git-local-manifests
     #   trigger: true
@@ -185,14 +211,30 @@ jobs:
   plan:
   - in_parallel:
     - get: git-lineageos-mirror
+      params: {depth: 2}
+      trigger: true
+      passed: [sync-mirror]
+    - get: git-lineageos-android
+      params: {depth: 2}
+      trigger: true
+      passed: [sync-mirror]
+    - get: git-lineageos-android_vendor_lineage
+      params: {depth: 2}
+      trigger: true
+      passed: [sync-mirror]
+    - get: git-lineageos-android_frameworks_base
+      params: {depth: 2}
+      trigger: true
+    - get: git-lineageos-android_device_sony_discovery
+      params: {depth: 2}
       trigger: true
       passed: [sync-mirror]
     - get: git-proprietary-muppets
+      params: {depth: 2}
       trigger: true
-      passed: [sync-mirror]
     - get: git-proprietary-muppets-gitlab
+      params: {depth: 2}
       trigger: true
-      passed: [sync-mirror]
     # - get: git-local-manifests
     #   trigger: true
     #   passed: [sync-mirror]
