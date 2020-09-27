@@ -131,7 +131,7 @@ jobs:
         image: image/image-pipeline.tar
 
 # update the local mirror when there is a reason to
-- name: sync-mirror
+- name: prepare-mirror
   serial_groups:
   - io-intensive
   plan:
@@ -203,7 +203,11 @@ jobs:
           # mount mirror directory
           sudo mount -v ${MIRROR_SHARE} ${MIRROR_DIR}
 
-          mirror_init
+          pushd ${MIRROR_DIR}/.repo/repo &>/dev/null
+          git reset --hard origin/master
+          popd &>/dev/null
+          # mirror_init
+          find ${MIRROR_DIR} \! -uid 1000 \! -type l -exec chown 1000:1000 {} \;
 
 - name: run-build
   serial_groups:
@@ -213,22 +217,22 @@ jobs:
     - get: git-lineageos-mirror
       params: {depth: 2}
       trigger: true
-      passed: [sync-mirror]
+      passed: [prepare-mirror]
     - get: git-lineageos-android
       params: {depth: 2}
       trigger: true
-      passed: [sync-mirror]
+      passed: [prepare-mirror]
     - get: git-lineageos-android_vendor_lineage
       params: {depth: 2}
       trigger: true
-      passed: [sync-mirror]
+      passed: [prepare-mirror]
     - get: git-lineageos-android_frameworks_base
       params: {depth: 2}
       trigger: true
     - get: git-lineageos-android_device_sony_discovery
       params: {depth: 2}
       trigger: true
-      passed: [sync-mirror]
+      passed: [prepare-mirror]
     - get: git-proprietary-muppets
       params: {depth: 2}
       trigger: true
@@ -237,7 +241,7 @@ jobs:
       trigger: true
     # - get: git-local-manifests
     #   trigger: true
-    #   passed: [sync-mirror]
+    #   passed: [prepare-mirror]
 
   - task: run-build
     config:
@@ -258,4 +262,7 @@ jobs:
         args:
         - -c
         - |
-          ssh -l ((build-server.user)) -i <(echo "$SSH_KEY") ((build-server.host)) -c "bash /storage/android/docker/build.sh"
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -l ((build-server.user)) -i ~/.ssh/id_rsa ((build-server.host)) -o StrictHostKeyChecking=false -- "bash /storage/android/docker/build.sh"
