@@ -1,7 +1,19 @@
+get-params-git: &get-params-git
+  depth: 1
+  submodules: none
+  disable_git_lfs: true
+
+resource_types:
+- name: fly
+  type: docker-image
+  source:
+    repository: troykinsella/concourse-fly-resource
+    tag: latest
+
 resources:
 - name: git-docker-androidbuild
   type: git
-  icon: github-circle
+  icon: github
   source:
     uri: git@github.com:ionphractal/docker-androidbuild.git
     branch: master
@@ -30,45 +42,61 @@ resources:
     tag: latest
 - name: git-repo-tool
   type: git
-  icon: github-circle
+  icon: github
   source:
     uri: https://gerrit.googlesource.com/git-repo/
     tag_filter: v[0-9].[0-9]*
 - name: git-lineageos-android
   type: git
-  icon: github-circle
+  icon: github
   source:
     uri: https://github.com/LineageOS/android.git
-- name: git-lineageos-android_vendor_lineage
+- name: git-lineageos-android-vendor-lineage
   type: git
-  icon: github-circle
+  icon: github
   source:
     uri: https://github.com/LineageOS/android_vendor_lineage.git
-- name: git-lineageos-android_frameworks_base
+# - name: git-lineageos-android-frameworks-base
+#   type: git
+#   icon: github
+#   source:
+#     uri: https://github.com/LineageOS/android_frameworks_base.git
+- name: git-lineageos-android-device-sony-discovery
   type: git
-  icon: github-circle
-  source:
-    uri: https://github.com/LineageOS/android_frameworks_base.git
-- name: git-lineageos-android_device_sony_discovery
-  type: git
-  icon: github-circle
+  icon: github
   source:
     uri: https://github.com/LineageOS/android_device_sony_discovery.git
 - name: git-lineageos-mirror
   type: git
-  icon: github-circle
+  icon: github
   source:
     uri: https://github.com/LineageOS/mirror.git
-- name: git-proprietary-muppets
-  type: git
-  icon: github-circle
+# - name: git-proprietary-muppets
+#   type: git
+#   icon: github
+#   source:
+#     uri: https://github.com/TheMuppets/manifests.git
+# - name: git-proprietary-muppets-gitlab
+#   type: git
+#   icon: github
+#   source:
+#     uri: https://gitlab.com/the-muppets/manifest.git
+
+- name: once-a-day
+  type: time
+  icon: timer
   source:
-    uri: https://github.com/TheMuppets/manifests.git
-- name: git-proprietary-muppets-gitlab
-  type: git
-  icon: github-circle
+    start: 0:00 AM
+    stop: 0:01 AM
+
+- name: fly
+  type: fly
+  icon: concourse-ci
   source:
-    uri: https://gitlab.com/the-muppets/manifest.git
+    url: ((concourse.url))
+    username: ((concourse.username))
+    password: ((concourse.password))
+    target: ((concourse.target))
 
 jobs:
 - name: update-build-image
@@ -141,16 +169,16 @@ jobs:
     - get: docker-androidbuild-local-pipeline
       trigger: false
     - get: git-lineageos-mirror
-      params: {depth: 2}
+      params: *get-params-git
       trigger: true
     - get: git-lineageos-android
-      params: {depth: 2}
+      params: *get-params-git
       trigger: true
-    - get: git-lineageos-android_vendor_lineage
-      params: {depth: 2}
+    - get: git-lineageos-android-vendor-lineage
+      params: *get-params-git
       trigger: true
-    - get: git-lineageos-android_device_sony_discovery
-      params: {depth: 2}
+    - get: git-lineageos-android-device-sony-discovery
+      params: *get-params-git
       trigger: true
     # - get: git-local-manifests
     #   trigger: true
@@ -169,8 +197,6 @@ jobs:
       inputs:
       - name: git-docker-androidbuild
       - name: git-lineageos-mirror
-      - name: git-proprietary-muppets
-      - name: git-proprietary-muppets-gitlab
       # - name: git-local-manifests
 
       params:
@@ -208,41 +234,18 @@ jobs:
           popd &>/dev/null
           # mirror_init
           find ${MIRROR_DIR} \! -uid 1000 \! -type l -exec chown 1000:1000 {} \;
+          ssh -l ((build-server.user)) -i ~/.ssh/id_rsa ((build-server.host)) -o StrictHostKeyChecking=false -- "touch /storage/android/docker/build.today"
+    on_success:
+      put: fly
+      params:
+        options: unpause-job --job docker-androidbuild/run-build
 
 - name: run-build
   serial_groups:
   - io-intensive
   plan:
-  - in_parallel:
-    - get: git-lineageos-mirror
-      params: {depth: 2}
-      trigger: true
-      passed: [prepare-mirror]
-    - get: git-lineageos-android
-      params: {depth: 2}
-      trigger: true
-      passed: [prepare-mirror]
-    - get: git-lineageos-android_vendor_lineage
-      params: {depth: 2}
-      trigger: true
-      passed: [prepare-mirror]
-    - get: git-lineageos-android_frameworks_base
-      params: {depth: 2}
-      trigger: true
-    - get: git-lineageos-android_device_sony_discovery
-      params: {depth: 2}
-      trigger: true
-      passed: [prepare-mirror]
-    - get: git-proprietary-muppets
-      params: {depth: 2}
-      trigger: true
-    - get: git-proprietary-muppets-gitlab
-      params: {depth: 2}
-      trigger: true
-    # - get: git-local-manifests
-    #   trigger: true
-    #   passed: [prepare-mirror]
-
+  - get: once-a-day
+    trigger: true
   - task: run-build
     config:
       platform: linux
@@ -265,4 +268,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -l ((build-server.user)) -i ~/.ssh/id_rsa ((build-server.host)) -o StrictHostKeyChecking=false -- "bash /storage/android/docker/build.sh"
+          echo "Starting build process on remote ((build-server.user))@((build-server.host))"
+          ssh -l ((build-server.user)) -i ~/.ssh/id_rsa ((build-server.host)) -o StrictHostKeyChecking=false -- "if [ -f /storage/android/docker/build.today ]; then bash /storage/android/docker/build.sh; retcode=$?; rm /storage/android/docker/build.today; exit $retcode; fi"
+    ensure:
+      put: fly
+      params:
+        options: pause-job --job docker-androidbuild/run-build
