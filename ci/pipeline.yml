@@ -201,6 +201,7 @@ jobs:
 
       params:
         MIRROR_SHARE: ((mirror.share))
+        SSH_KEY: ((build-server.key))
 
       run:
         user: root
@@ -208,8 +209,9 @@ jobs:
         args:
         - -c
         - |
-          # sudo chown -R 1000:1000 .
-          ls -lah
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
           # set required env vars and source/import build functions
           export BUILD_SCRIPTS_PATH="$(pwd)/git-docker-androidbuild/src"
