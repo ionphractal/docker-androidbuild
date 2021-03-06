@@ -1,0 +1,16 @@
+builds:
+- name: Sony Xperia XA2 Ultra
+  codename: discovery
+  rom: lineageos
+  flavor: microg
+- name: Samsung Tab S2 T810
+  codename: gts210wifi
+  rom: lineageos
+  flavor: microg
+  local_manifests:
+  - https://github.com/Exynos5433/local_manifests/blob/lineage-17.1/gts28wifi.xml
+- name: Sony Xperia S
+  codename: nozomi
+  rom: nAOSP
+  local_manifests:
+  - https://github.com/millosr/naosp_manifest/blob/nAOSP-8.1/local_manifest.xml
