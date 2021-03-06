@@ -34,6 +34,7 @@ resources:
     repository: ionphractal/docker-androidbuild
     username: ((dockerhub.username))
     password: ((dockerhub.password))
+    tag: latest
 - name: docker-androidbuild-local-pipeline
   type: registry-image
   icon: docker
@@ -82,12 +83,14 @@ resources:
 #   source:
 #     uri: https://gitlab.com/the-muppets/manifest.git
 
-- name: once-a-day
+- name: once-a-week
   type: time
   icon: timer
   source:
     start: 0:00 AM
     stop: 0:01 AM
+    days:
+    - Wednesday
 
 - name: fly
   type: fly
@@ -246,7 +249,7 @@ jobs:
   serial_groups:
   - io-intensive
   plan:
-  - get: once-a-day
+  - get: once-a-week
     trigger: true
   - task: run-build
     config:
